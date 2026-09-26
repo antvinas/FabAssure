@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ko">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>FabAssure · 제조 변경 품질 관리</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js" defer></script>
+</head>
+<body>
+    <div class="app-shell">
+        <aside class="sidebar" aria-label="주 메뉴">
+            <div class="brand-block">
+                <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+                <div><strong class="brand-name">FabAssure</strong><span class="brand-caption">제조 품질 보증</span></div>
+            </div>
+            <div class="sidebar-section-label">작업 공간</div>
+            <nav class="primary-nav" aria-label="모듈">
+                <button type="button" data-view="overview" class="nav-link active"><span class="nav-glyph" aria-hidden="true">◫</span>개요</button>
+                <button type="button" data-view="changes" class="nav-link"><span class="nav-glyph" aria-hidden="true">◇</span>변경 관리</button>
+                <button type="button" data-view="fabtrace" class="nav-link"><span class="nav-glyph" aria-hidden="true">⌁</span>FabTrace</button>
+                <button type="button" data-view="equipment" class="nav-link"><span class="nav-glyph" aria-hidden="true">▣</span>설비</button>
+                <button type="button" data-view="evidence" class="nav-link"><span class="nav-glyph" aria-hidden="true">▤</span>증거</button>
+                <button type="button" data-view="documents" class="nav-link"><span class="nav-glyph" aria-hidden="true">▧</span>관리 문서</button>
+                <button type="button" data-view="review" class="nav-link"><span class="nav-glyph" aria-hidden="true">◎</span>검토 대기열</button>
+                <button type="button" data-view="audit" class="nav-link"><span class="nav-glyph" aria-hidden="true">≡</span>감사 기록</button>
+                <button type="button" data-view="demoInfo" class="nav-link"><span class="nav-glyph" aria-hidden="true">ⓘ</span>데모 정보</button>
+            </nav>
+            <p class="nav-scroll-cue" aria-hidden="true">← 메뉴를 좌우로 밀어 더 보기 →</p>
+            <div class="sidebar-footer">
+                <span class="sidebar-indicator" aria-hidden="true"></span>
+                <div><strong>샘플 데이터</strong></div>
+            </div>
+        </aside>
+        <div class="content-shell">
+            <header class="topbar">
+                <div class="topbar-title"><span class="topbar-eyebrow">FabAssure / <span id="crumb">개요</span></span><span class="topbar-subtitle">엔지니어링 결정과 그 증거</span></div>
+                <div class="topbar-tools">
+                    <span class="offline-pill"><span aria-hidden="true"></span>오프라인 · 127.0.0.1</span>
+                    <div class="actor-control">
+                        <label class="actor-label" for="actor-select">현재 역할</label>
+                        <select id="actor-select" aria-describedby="actor-identity"></select>
+                        <p class="actor-identity" id="actor-identity"><span class="actor-name" data-actor-name>—</span><span class="role-chip" data-actor-role>—</span></p>
+                    </div>
+                </div>
+            </header>
+            <main id="view" tabindex="-1" lang="ko"><div class="loading-state">기록을 불러오는 중…</div></main>
+            <div id="live-region" class="visually-hidden" role="status" aria-live="polite"></div>
+            <footer class="app-footer"><span>FabAssure · 제조 변경 품질 관리</span><span>로컬 작업 공간</span></footer>
+        </div>
+    </div>
+    <div id="toast" class="toast" role="status" hidden><span id="toast-message"></span><button type="button" id="toast-close" class="toast-close" hidden>닫기</button></div>
+</body>
+</html>

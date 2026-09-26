@@ -1,0 +1,14 @@
+/data/
+/dist/
+/runtime/
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+*.log
+*.zip
+*.tmp
+*.pending
+node_modules/
+.DS_Store
+Thumbs.db
