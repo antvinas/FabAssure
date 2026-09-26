@@ -39,6 +39,21 @@ const labels = Object.freeze({
 });
 const labelFor = (group, value) => Object.hasOwn(group, value) ? group[value] : null;
 const roleLabel = role => labelFor(labels.roles, role) ?? String(role ?? '—');
+const sampleDisplayNames = Object.freeze({
+    'Integrated alignment and vision cell A': '통합 정렬·비전 셀 A',
+    'Vision inspection station A': '비전 검사 스테이션 A',
+    'Alignment station B': '정렬 스테이션 B',
+    'Vision inspection station B': '비전 검사 스테이션 B',
+    'Synthetic integrated vision module repair': '통합 비전 모듈 수리',
+    'Synthetic integrated vision module maintenance before excursion': '이상 전 통합 비전 모듈 정비',
+    'Synthetic camera alignment control plan': '카메라 정렬 관리 계획',
+    'Synthetic camera alignment process FMEA': '카메라 정렬 공정 FMEA',
+    'Synthetic alignment and vision work instruction': '정렬·비전 작업 지침',
+    'Synthetic baseline: AOI fiducial check and recorded lot disposition.': '기준: AOI 기준점 검사와 LOT 처분 기록',
+    'Synthetic baseline: module shift failure mode and detection control.': '기준: 모듈 편차 고장 형태와 검출 관리',
+    'Synthetic baseline: alignment setup, vision check and escalation steps.': '기준: 정렬 설정, 비전 검사와 보고 절차'
+});
+const sampleDisplay = value => sampleDisplayNames[value] ?? value;
 const actorDisplayName = actor => {
     const position = state.bootstrap?.actors.findIndex(item => item.id === actor?.id) ?? -1;
     return position >= 0 ? `담당자 ${position + 1}` : '담당자';
@@ -1155,7 +1170,7 @@ function renderCapaWorkflow(detail) {
         const doc = detail.controlledDocuments.find(candidate => candidate.id === item.document_id);
         const revisions = doc?.revisions ?? [];
         const sourceRevision = revisions.find(revision => revision.source_feedback_id === item.id);
-        return `<tr><td><span class="mono">${text(item.id)}</span><br>${text(doc?.title ?? item.document_id)}<br>${text(item.proposed_summary)}</td><td class="mono">${text(item.capa_action_id)}<br>${text(item.incident_id)} / ${text(item.cycle_id)}</td><td>${item.review ? `${chip(item.review.decision)} · ${text(item.review.reviewer_actor_id)}<br>${text(item.review.reason)}` : '<span class="status-chip warn">검토 대기</span>'}</td><td>${text(item.base_revision_id)} → ${text(sourceRevision?.id ?? '승인 대기')}<br>${sourceRevision ? `승인자 ${text(sourceRevision.approved_by)}` : ''}</td></tr>`;
+        return `<tr><td><span class="mono">${text(item.id)}</span><br>${text(sampleDisplay(doc?.title ?? item.document_id))}<br>${text(item.proposed_summary)}</td><td class="mono">${text(item.capa_action_id)}<br>${text(item.incident_id)} / ${text(item.cycle_id)}</td><td>${item.review ? `${chip(item.review.decision)} · ${text(item.review.reviewer_actor_id)}<br>${text(item.review.reason)}` : '<span class="status-chip warn">검토 대기</span>'}</td><td>${text(item.base_revision_id)} → ${text(sourceRevision?.id ?? '승인 대기')}<br>${sourceRevision ? `승인자 ${text(sourceRevision.approved_by)}` : ''}</td></tr>`;
     }).join('')}</tbody></table></div>` : empty('관리 문서 피드백 없음', '독립 검토를 통과한 CAPA 조치에서 문서 개정을 제안할 수 있습니다.');
     const feedbackForm = cycle && passedActions.length && currentDocs.length ? renderCapaForm('feedback', '문서 피드백 제안', [
         { name: 'id', label: '피드백 ID', placeholder: 'FB-001' },
@@ -1177,7 +1192,7 @@ function renderCapaWorkflow(detail) {
         { name: 'feedbackId', label: '검토된 피드백', type: 'select', options: approvableFeedback.map(item => ({ value: item.id, label: `${item.id} · ${item.document_id}` })) },
         { name: 'reason', label: '승인 이유', placeholder: '검토된 문서 변경을 확인하세요' }
     ], actorHasRole(['Approver', 'Quality Engineer'])) : '';
-    const documentRevisions = detail.controlledDocuments.map(doc => `<div class="revision-card"><div class="revision-head"><strong>${text(doc.doc_type)} · ${text(doc.code)}</strong><span class="small-chip">${text(doc.scope_equipment_id)} / ${text(doc.defect_code_id)}</span></div><div class="revision-body">${doc.revisions.map(revision => `<div class="field-grid document-lineage">${row('개정', `R${revision.revision_no}`)}${row('개정 요약', revision.summary)}${row('승인자 · 시각', `${revision.approved_by} · ${dateText(revision.approved_at)}`)}</div><details><summary>개정 기술 정보</summary><div class="field-grid">${row('개정 ID', revision.id)}${row('이전 개정', revision.parent_revision_id ?? '기준 개정')}${row('원천 피드백', revision.source_feedback_id ?? '기준 데이터')}${row('원천 사건', revision.source_incident_id ?? '기준 데이터')}${row('원천 사이클', revision.source_cycle_id ?? '기준 데이터')}</div></details>`).join('')}</div></div>`).join('');
+    const documentRevisions = detail.controlledDocuments.map(doc => `<div class="revision-card"><div class="revision-head"><strong>${text(doc.doc_type)} · ${text(doc.code)}</strong><span class="small-chip">${text(doc.scope_equipment_id)} / ${text(doc.defect_code_id)}</span></div><div class="revision-body">${doc.revisions.map(revision => `<div class="field-grid document-lineage">${row('개정', `R${revision.revision_no}`)}${row('개정 요약', sampleDisplay(revision.summary))}${row('승인자 · 시각', `${revision.approved_by} · ${dateText(revision.approved_at)}`)}</div><details><summary>개정 기술 정보</summary><div class="field-grid">${row('개정 ID', revision.id)}${row('이전 개정', revision.parent_revision_id ?? '기준 개정')}${row('원천 피드백', revision.source_feedback_id ?? '기준 데이터')}${row('원천 사건', revision.source_incident_id ?? '기준 데이터')}${row('원천 사이클', revision.source_cycle_id ?? '기준 데이터')}</div></details>`).join('')}</div></div>`).join('');
     const audit = detail.audit.filter(item => ['capa-started', 'cause-assessed', 'capa-action-recorded', 'capa-action-reviewed', 'document-feedback-proposed', 'document-feedback-reviewed', 'document-revision-approved'].includes(item.action));
     const reviewedActions = actions.filter(item => item.review);
     const actionReviewList = reviewedActions.length ? `<div class="table-wrap"><table><thead><tr><th>검토된 조치</th><th>결정</th><th>후속 원천 근거</th><th>검토자 · 이유</th></tr></thead><tbody>${reviewedActions.map(item => `<tr><td class="mono">${text(item.id)}</td><td>${chip(item.review.decision)}</td><td>${text(item.review.evidence_kind)} · <span class="mono">${text(item.review.evidence_id)}</span></td><td>${text(item.review.reviewer_actor_id)}<br>${text(item.review.reason)}</td></tr>`).join('')}</tbody></table></div>` : empty('독립 조치 검토 없음', '별도 검토자가 후속 원천 근거로 조치를 확인합니다.');
@@ -1601,7 +1616,7 @@ function renderEquipment() {
         <td class="mono">${text(item.moduleId)}</td>
         <td>${item.kind === 'maintenance-action' ? `${dateText(item.startAt)} → ${dateText(item.endAt)}` :
             item.durationSeconds == null ? '—' : `${number(item.durationSeconds / 3600)} h`}</td>
-        <td>${text(item.summary ?? '—')}</td></tr>`).join('');
+        <td>${text(sampleDisplay(item.summary ?? '—'))}</td></tr>`).join('');
     const runRows = recentRuns.map(item => `<tr><td class="mono">${text(item.id)}</td>
         <td class="mono">${text(item.lotId)}</td><td class="mono">${text(item.moduleId)}</td>
         <td class="mono">${text(item.recipeRevisionId)}</td><td>${dateText(item.startAt)}</td>
@@ -1615,7 +1630,7 @@ function renderEquipment() {
     return `<div class="page-heading"><div><p class="eyebrow">설비 신뢰성</p>
         <h1>설비 이력</h1><p>설비 이벤트, 수리, 레시피와 공정 기록을 같은 관측 구간에서 확인합니다.</p></div></div>
         <div class="heading-actions">${choices}</div>
-        <div class="record-header top-gap"><div><h2>${text(equipment.name)}</h2><p>모듈 ${equipment.modules.map(item => text(item.id)).join(', ')}</p><details><summary>기술 정보</summary><span class="mono muted">${text(equipment.id)} · ${text(equipment.lineId)}</span></details></div>
+        <div class="record-header top-gap"><div><h2>${text(sampleDisplay(equipment.name))}</h2><p>모듈 ${equipment.modules.map(item => text(item.id)).join(', ')}</p><details><summary>기술 정보</summary><span class="mono muted">${text(equipment.id)} · ${text(equipment.lineId)}</span></details></div>
         <div class="record-meta"><span class="small-chip">조회 전용</span></div></div>
         <div class="stat-grid"><div class="stat-card teal"><span class="label">관측 구간</span>
         <strong class="value">${number(observationWindow.hours)} <small>h</small></strong>
