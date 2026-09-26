@@ -1721,7 +1721,7 @@ async function loadEquipment(id, requestNo) {
         }
         if (requestNo !== state.navigationRequestNo) return false;
         const selectedId = id ?? state.equipmentId ?? equipmentList.equipment[0]?.id;
-        if (!selectedId) throw new Error('No synthetic equipment is available');
+        if (!selectedId) throw new Error('선택할 수 있는 설비가 없습니다.');
         let equipmentDetail;
         try { equipmentDetail = await request(`/api/equipment/${encodeURIComponent(selectedId)}`); }
         catch (error) {
