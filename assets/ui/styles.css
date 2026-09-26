@@ -53,3 +53,33 @@ main{width:min(1500px,100%);margin:0 auto;padding:34px;flex:1}.app-footer{paddin
 .change-monitoring{display:grid;gap:12px;min-width:0}.detail-section.change-monitoring h3,.detail-section.change-monitoring>p{margin:0}.change-monitoring .warning-box{margin:0}
 .monitoring-path{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px;line-height:1.45}.monitoring-path li{display:inline-flex;align-items:baseline;flex-wrap:wrap;background:#f4f7f5;border:1px solid #e1e9e4;border-radius:6px;padding:5px 8px;min-width:0;max-width:100%;overflow-wrap:anywhere;color:var(--ink);font-weight:700}.monitoring-path li+li:before{content:"→";color:#9a4f24;font-weight:850;margin-right:6px}
 @media(max-width:560px){.capa-form,.next-step-facts{grid-template-columns:minmax(0,1fr)}}
+.record-ids span{display:block;margin-top:4px;overflow-wrap:anywhere}
+.record-ids summary,.audit-list details summary{font-size:12px;color:var(--muted)}
+.audit-count{margin:0 0 12px;font-size:12px}
+.audit-more{margin-top:14px}
+.audit-more>.audit-list{margin-top:14px}
+.revision-card.failed:not(.current){border-color:#e7c3a6}
+.revision-card.failed:not(.current) .revision-head{background:#fbf1ea}
+.criteria-table td{vertical-align:middle}
+.exposure-window{margin:0 0 12px;color:var(--ink)}
+.lot-table td{vertical-align:top}
+.timeline-table tr.timeline-key td{background:#f3f7f5;font-weight:700}
+.decision-chain .workflow-step.filled small{color:var(--ink);font-weight:800}
+.chain-summary{margin:10px 2px 0;color:var(--muted);font-size:13px}
+.overview-paths .card{display:flex;flex-direction:column;gap:10px}
+.overview-paths .card h3{margin:0}
+.overview-paths .card p{margin:0;flex:1}
+.overview-paths .card .button{align-self:flex-start}
+.acceptance-terms{grid-template-columns:repeat(2,minmax(0,1fr))}
+.acceptance-terms label:last-child{grid-column:1/-1}
+@media(max-width:560px){.acceptance-terms{grid-template-columns:1fr}}
+.stat-card.emphasis{border-top-color:#35525a}
+.decision-chain .workflow-step .step-no{color:#6b8583}
+.decision-chain .workflow-step.current .step-no{color:#b85e2c}
+.ledger-entry details>summary,.revision-body details>summary:not(.button),.cycle-panel details>summary,.record-header details>summary,.capa-stage-body details>summary:not(.button){font-size:12px;font-weight:800;color:#53666b;cursor:pointer}
+.hero .eyebrow{color:#b6d2d0;letter-spacing:.08em}
+.chain-summary{margin-bottom:18px}
+.panel-grid>*,.stack,.stack>*,.card,.detail-section{min-width:0}
+.table-wrap{max-width:100%}
+.table-wrap{position:relative}
+main details>summary:not(.button){font-size:12px;font-weight:800;color:#53666b}

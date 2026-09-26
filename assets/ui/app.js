@@ -18,12 +18,16 @@ const labels = Object.freeze({
     states: Object.freeze({
         'Draft': '초안', 'Submitted': '제출됨', 'Risk Classified': '위험 분류됨',
         'Plan Approved': '계획 승인됨', 'Verification In Progress': '검증 진행 중',
-        'Evidence Ready': '증거 준비 완료', 'Independent Review': '독립 검토', 'Accepted': '수락됨',
-        'Effectiveness Monitoring': '효과성 모니터링', 'Closed': '종결', 'Needs Rework': '재작업 필요',
+        'Evidence Ready': '근거 확정', 'Independent Review': '독립 검토', 'Accepted': '수락됨',
+        'Effectiveness Monitoring': '효과성 확인 중', 'Closed': '종결', 'Needs Rework': '재작업 필요',
         'Rejected': '반려', 'Reopened': '재개', 'Open': '발생', 'Contained': '봉쇄됨',
         'Trace Proposed': '추적 제안됨', 'Scope Reviewed': '범위 검토됨', 'CAPA In Progress': 'CAPA 진행 중',
         'Effectiveness Check': '효과성 확인', 'Pass': '합격', 'Hypothesis': '가설', 'Confirmed': '확정',
-        'Corrective': '시정', 'Preventive': '예방', 'included': '포함', 'excluded': '제외', 'ambiguous': '불확실'
+        'Corrective': '시정', 'Preventive': '예방', 'included': '포함', 'excluded': '제외', 'ambiguous': '불확실',
+        'confirmed-affected': '확정 영향', 'potentially-exposed': '노출 가능',
+        'Held': '보류', 'No Change': '변경 없음', 'Additional Inspection': '추가 검사',
+        'Monitoring': '데이터 부족', 'Reopen Required': '재개 필요', 'Ordinary': '일반 수락',
+        'Conditional': '조건부 수락'
     }),
     roles: Object.freeze({
         'Manufacturing Engineer': '제조 엔지니어', 'Equipment / Automation Engineer': '설비·자동화 엔지니어',
@@ -32,12 +36,13 @@ const labels = Object.freeze({
         'Proposer': '요청자'
     }),
     views: Object.freeze({
-        overview: '개요', changes: '변경 관리', changeDetail: '변경 상세', fabtrace: 'FabTrace',
-        equipment: '설비', evidence: '증거', documents: '관리 문서', review: '검토 대기열', audit: '감사 기록',
+        overview: '개요', changes: '변경 관리', changeDetail: '변경 상세', fabtrace: '영향 추적',
+        equipment: '설비 이력', evidence: '증거', documents: '관리 문서', review: '검토 대기열', audit: '감사 기록',
         demoInfo: '데모 정보'
     })
 });
 const labelFor = (group, value) => Object.hasOwn(group, value) ? group[value] : null;
+const stateLabel = value => labelFor(labels.states, value) ?? String(value ?? '—');
 const roleLabel = role => labelFor(labels.roles, role) ?? String(role ?? '—');
 const sampleDisplayNames = Object.freeze({
     'Integrated alignment and vision cell A': '통합 정렬·비전 셀 A',
@@ -46,17 +51,77 @@ const sampleDisplayNames = Object.freeze({
     'Vision inspection station B': '비전 검사 스테이션 B',
     'Synthetic integrated vision module repair': '통합 비전 모듈 수리',
     'Synthetic integrated vision module maintenance before excursion': '이상 전 통합 비전 모듈 정비',
-    'Synthetic camera alignment control plan': '카메라 정렬 관리 계획',
-    'Synthetic camera alignment process FMEA': '카메라 정렬 공정 FMEA',
+    'Synthetic camera alignment control plan': '정렬 관리 계획',
+    'Synthetic camera alignment process FMEA': '정렬 공정 FMEA',
     'Synthetic alignment and vision work instruction': '정렬·비전 작업 지침',
     'Synthetic baseline: AOI fiducial check and recorded lot disposition.': '기준: AOI 기준점 검사와 LOT 처분 기록',
     'Synthetic baseline: module shift failure mode and detection control.': '기준: 모듈 편차 고장 형태와 검출 관리',
-    'Synthetic baseline: alignment setup, vision check and escalation steps.': '기준: 정렬 설정, 비전 검사와 보고 절차'
+    'Synthetic baseline: alignment setup, vision check and escalation steps.': '기준: 정렬 설정, 비전 검사와 보고 절차',
+    'Initial synthetic incident': '최초 등록',
+    'Sampled AOI does not prove all intervening units good': '샘플 AOI만으로는 사이 구간 전 수량의 정상 여부를 증명할 수 없습니다.',
+    'Synthetic later source meets the approved monitoring rule': '후속 근거가 승인된 확인 기준을 충족합니다.',
+    'Synthetic source interval and AOI intersection': '원천 구간과 AOI 교차로 계산',
+    'A repair overlaps the observation boundary; complete-window reliability is unavailable': '관측 구간 경계에 걸친 수리 기록이 있어 신뢰성 지표를 계산하지 않습니다'
 });
 const sampleDisplay = value => sampleDisplayNames[value] ?? value;
+const defectNames = Object.freeze({ 'DEF-ALIGN': '정렬 불량', 'DEF-FIDUCIAL': '기준점 인식 불량',
+    'DEF-COSMETIC': '외관 불량' });
+const defectName = id => defectNames[id] ?? String(id ?? '—');
+// Findings stored by the monitoring rules, shown in Korean. Unknown findings are shown as stored.
+const findingNames = Object.freeze({
+    'Target defect recurrence': '대상 결함 재발', 'Critical AOI defect': '중대 AOI 결함',
+    'AOI reject rate exceeds 2%': 'AOI 불량률 2% 초과',
+    'Alignment measurement outside approved limit': '정렬 측정값 허용 한계 초과',
+    'Unresolved related equipment alarm': '관련 설비 경보 미해결',
+    'Unresolved blocking deviation': '차단 편차 미해결',
+    'Insufficient subsequent lots': '후속 LOT 부족', 'Insufficient calendar-day span': '확인 기간 부족',
+    'AOI coverage incomplete': 'AOI 검사 범위 불완전', 'Measurement evidence missing': '측정 근거 없음',
+    'AOI denominator': 'AOI 검사 수량 없음', 'AOI reject rate above 2%': 'AOI 불량률 2% 초과',
+    'target defect recurrence': '대상 결함 재발', 'unresolved related alarm': '관련 경보 미해결'
+});
+const findingLabel = value => {
+    const stored = String(value ?? '');
+    if (Object.hasOwn(findingNames, stored)) return findingNames[stored];
+    const lots = stored.match(/^(\d+) later lots$/);
+    if (lots) return `후속 LOT ${lots[1]}건 부족`;
+    const days = stored.match(/^(\d+) calendar days$/);
+    if (days) return `확인 기간 ${days[1]}일 부족`;
+    return sampleDisplay(stored);
+};
+const findingsFrom = value => String(value ?? '').split(';').map(item => item.trim()).filter(Boolean).map(findingLabel);
+// Risk rules in site language. The rule version and score stay in the record ID panel.
+const riskRuleNames = Object.freeze({ R01: '안전 영향', R02: '핵심 특성 변경', R03: '고심각도·저검출',
+    R04: '위험 점수 9 이상', R05: '위험 점수 6 이상', R06: '영향 제한' });
+const riskText = (level, rule) => `위험 ${level ?? '—'}${riskRuleNames[rule] ? ` · ${riskRuleNames[rule]}` : ''}`;
+// Criteria in shop-floor units: fractions as percent, counts as 건, <= as ≤.
+const criterionNames = Object.freeze({ 'ALIGN-X': '정렬 편차', 'AOI-RATE': 'AOI 불량률',
+    'CRITICAL-DEFECTS': '중대 결함' });
+function unitValue(value, unit) {
+    if (value == null || value === '') return '—';
+    const numeric = Number(value);
+    if (unit === 'fraction') return `${Number((numeric * 100).toFixed(2)).toString()} %`;
+    if (unit === 'count') return `${number(numeric)}건`;
+    if (unit === 'mm') return `${numeric.toFixed(3)} mm`;
+    return `${value}${unit ? ` ${unit}` : ''}`;
+}
+const comparisonText = value => ({ '<=': '≤', '>=': '≥', '<': '<', '>': '>', '==': '=' })[value] ?? String(value ?? '');
+function limitText(criterion) {
+    if (criterion.unit === 'count' && Number(criterion.threshold) === 0 && criterion.comparison === '<=') return '0건';
+    const threshold = criterion.unit === 'mm' ? `${Number(criterion.threshold)} mm` : unitValue(criterion.threshold, criterion.unit);
+    return `${comparisonText(criterion.comparison)} ${threshold}`;
+}
+// People are shown by role. Actor IDs stay in audit detail only.
+const actorById = id => state.bootstrap?.actors.find(item => item.id === id) ?? null;
 const actorDisplayName = actor => {
-    const position = state.bootstrap?.actors.findIndex(item => item.id === actor?.id) ?? -1;
-    return position >= 0 ? `담당자 ${position + 1}` : '담당자';
+    if (!actor) return '담당자';
+    const peers = state.bootstrap?.actors.filter(item => item.role === actor.role) ?? [];
+    const position = peers.findIndex(item => item.id === actor.id);
+    return peers.length > 1 && position >= 0 ? `${roleLabel(actor.role)} ${position + 1}` : roleLabel(actor.role);
+};
+const actorLabel = id => {
+    if (!id) return '—';
+    const actor = actorById(id);
+    return actor ? actorDisplayName(actor) : String(id).startsWith('SYS') ? '시스템' : String(id);
 };
 const roleDisplay = role => {
     const value = String(role ?? '—');
@@ -67,43 +132,87 @@ const roleDisplay = role => {
         .replaceAll('Production Manager', '생산 관리자').replaceAll('Reviewer', '검토자')
         .replaceAll('Approver', '승인자').replaceAll(' or ', ' 또는 ').replaceAll(' (not the evaluator or proposer)', '');
 };
+// Korean object particle (을/를) chosen from the final syllable.
+const withObject = word => {
+    const value = String(word ?? '');
+    const code = value.charCodeAt(value.length - 1);
+    if (code < 0xac00 || code > 0xd7a3) return `${value}을(를)`;
+    return `${value}${(code - 0xac00) % 28 ? '을' : '를'}`;
+};
+const withTopic = word => {
+    const value = String(word ?? '');
+    const code = value.charCodeAt(value.length - 1);
+    if (code < 0xac00 || code > 0xd7a3) return `${value}은(는)`;
+    return `${value}${(code - 0xac00) % 28 ? '은' : '는'}`;
+};
+const withDirection = word => {
+    const value = String(word ?? '');
+    const code = value.charCodeAt(value.length - 1);
+    if (code < 0xac00 || code > 0xd7a3) return `${value}(으)로`;
+    const batchim = (code - 0xac00) % 28;
+    return `${value}${batchim && batchim !== 8 ? '으로' : '로'}`;
+};
+// One block-reason format: "{current role} cannot {task}. Switch to {allowed role}."
+const cannotDo = (actor, task, allowed) => `${withTopic(actorDisplayName(actor))} ${withObject(task)} 할 수 없습니다.${allowed ? ` ${withDirection(allowed)} 전환하세요.` : ''}`;
 const actionLabels = Object.freeze({
     submitChange: '변경 제출', classifyChange: '위험 분류', approvePlan: '검증 계획 승인',
     startVerification: '검증 시작', recordBaselineSet: '기준 근거 연결', linkSourceSet: '변경 후 근거 연결',
     linkPassingSourceSet: '변경 후 근거 연결', addMeasurementEvidence: '측정 근거 연결',
     recordAlignmentResult: '정렬 기준 평가', recordAoiResults: 'AOI 기준 평가',
-    markEvidenceReady: '증거 준비 완료', reviseFailedChange: '재작업 개정 생성',
+    markEvidenceReady: '근거 확정', reviseFailedChange: '재작업 개정 생성',
     beginIndependentReview: '독립 검토 시작', recordIndependentReview: '독립 검토 기록',
     acceptChange: '변경 수락', classifyLegacyAcceptance: '과거 수락 분류',
     reviseFailedEffectivenessChange: '효과성 불합격 후 새 개정 시작',
     reviseExpiredChange: '만료 후 새 개정 시작', containIncident: '봉쇄 기록',
     recordIncidentLkg: '마지막 정상 관측 기록', proposeIncidentTrace: '영향 범위 계산',
-    reviseIncidentTrace: '추적 범위 수정', reviewIncidentScope: '영향 범위 검토'
+    reviseIncidentTrace: '추적 범위 수정', reviewIncidentScope: '영향 범위 검토',
+    awaitPostRevisionSource: '개정 후 근거 연결'
 });
 const actionLabel = next => actionLabels[next?.action] ?? next?.label ?? '다음 작업';
+const capaActionLabels = Object.freeze({ startIncidentCapa: 'CAPA 사이클 시작', assessIncidentCause: '근본 원인',
+    planCapaAction: 'CAPA 조치', reviewCapaAction: '독립 조치 검토', proposeDocumentFeedback: '문서 피드백',
+    reviewDocumentFeedback: '문서 피드백 검토', approveDocumentRevision: '관리 문서 개정 승인' });
 const auditActionLabels = Object.freeze({
     'change-created': '변경 등록', 'change-submitted': '변경 제출', 'risk-classified': '위험 분류',
     'plan-approved': '검증 계획 승인', 'verification-started': '검증 시작',
     'baseline-evidence-added': '기준 근거 연결', 'measurement-evidence-added': '측정 근거 연결',
-    'aoi-evidence-added': 'AOI 근거 연결', 'criterion-passed': '기준 합격',
-    'aoi-criteria-passed': 'AOI 기준 합격', 'evidence-ready': '증거 준비 완료',
+    'aoi-evidence-added': 'AOI 근거 연결', 'criterion-passed': '기준 합격', 'criterion-failed': '기준 불합격',
+    'aoi-criteria-passed': 'AOI 기준 합격', 'evidence-ready': '근거 확정',
     'independent-review-started': '독립 검토 시작', 'independent-review-passed': '독립 검토 합격',
     'change-accepted': '변경 수락', 'change-effectiveness-evaluated': '효과성 확인',
     'change-monitoring-closed': '모니터링 종결', 'change-monitoring-reopened': '변경 재개',
-    'incident-closed': '사건 종결', 'incident-reopened': '사건 재개'
+    'change-revised-after-failure': '재작업 개정', 'change-revised-after-effectiveness-failure': '효과성 불합격 후 새 개정',
+    'change-revised-after-expiry': '만료 후 새 개정', 'conditional-acceptance-expired': '조건부 수락 만료',
+    'legacy-acceptance-classified': '과거 수락 분류', 'risk-override': '위험 등급 조정',
+    'aoi-criteria-failed': 'AOI 기준 불합격', 'independent-review-needs-rework': '독립 검토 재작업 필요',
+    'scope-needs-rework': '영향 범위 재작업 필요', 'deviation-dispositioned': '편차 처분',
+    'incident-created': '사건 등록', 'incident-contained': '봉쇄 기록', 'lkg-recorded': '마지막 정상 관측 기록',
+    'trace-proposed': '영향 범위 계산', 'trace-revised': '추적 범위 수정', 'scope-reviewed': '영향 범위 검토',
+    'capa-started': 'CAPA 사이클 시작', 'cause-assessed': '근본 원인 기록', 'capa-action-recorded': 'CAPA 조치 기록',
+    'capa-action-reviewed': '독립 조치 검토', 'document-feedback-proposed': '문서 피드백 제안',
+    'document-feedback-reviewed': '문서 피드백 검토', 'document-revision-approved': '관리 문서 개정 승인',
+    'effectiveness-evaluated': '효과성 확인', 'incident-closed': '사건 종결', 'incident-reopened': '사건 재개'
 });
 
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
 })[character]);
 const text = escapeHtml;
-const dateText = value => value ? escapeHtml(String(value).replace('T', ' ').replace('.000Z', ' UTC')) : '—';
+// Times are stored as canonical UTC. Cells show 'YYYY-MM-DD HH:MM'; UTC is named once in the column or section.
+const timeText = value => {
+    const match = String(value ?? '').match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::(\d{2}))?(?:\.\d+)?Z$/);
+    if (!match) return String(value ?? '');
+    return `${match[1]} ${match[2]}${match[3] && match[3] !== '00' ? `:${match[3]}` : ''}`;
+};
+const dateText = value => value ? escapeHtml(timeText(value)) : '—';
+const shortTime = value => timeText(value).slice(5);
 const number = value => value == null ? '—' : Number(value).toLocaleString('en-US');
 const percent = value => value == null ? '—' : `${(Number(value) * 100).toFixed(2)}%`;
 const shortHash = value => value ? `${String(value).slice(0, 10)}…` : '—';
 const statusClass = value => /Accepted|Closed|Pass/.test(value) ? 'good' :
-    /Failed|Needs Rework|Rejected/.test(value) ? 'bad' :
-        /Review|Progress|Submitted/.test(value) ? 'warn' : '';
+    /Failed|Needs Rework|Rejected|confirmed-affected|Reopen Required/.test(value) ? 'bad' :
+        /Review|Progress|Submitted|potentially-exposed|Held/.test(value) ? 'warn' :
+            /ambiguous|Monitoring$/.test(value) && value !== 'Effectiveness Monitoring' ? 'uncertain' : '';
 const chip = value => {
     const stored = String(value ?? '');
     const korean = labelFor(labels.states, stored);
@@ -115,8 +224,23 @@ const empty = (title, description) => `<div class="empty-state"><strong>${text(t
 async function request(path, options = {}) {
     const response = await fetch(path, { cache: 'no-store', ...options });
     const body = await response.json();
-    if (!response.ok) throw new Error(body.error?.message || '요청을 처리하지 못했습니다.');
+    if (!response.ok) throw new Error(serverErrorText(body.error));
     return body;
+}
+
+// Server refusals are shown in Korean by error code. The server still enforces every gate.
+const serverErrorTexts = Object.freeze({
+    GATE_DENIED: '서버 검사에서 이 결정을 허용하지 않았습니다. 역할, 순서와 시각을 확인하세요.',
+    LOCAL_DATA_CONFLICT: '이미 기록된 ID이거나 데이터 규칙과 맞지 않아 저장하지 않았습니다.',
+    BAD_REQUEST: '입력값이 규칙과 맞지 않아 저장하지 않았습니다. 형식과 시각을 확인하세요.',
+    NOT_FOUND: '기록을 찾을 수 없습니다.',
+    LOCAL_ONLY: '이 PC의 로컬 주소에서만 사용할 수 있습니다.'
+});
+function serverErrorText(error) {
+    const message = String(error?.message ?? '');
+    if (/role/i.test(message) && error?.code === 'GATE_DENIED') return '현재 역할로는 이 결정을 기록할 수 없습니다. 필요한 역할로 전환하세요.';
+    if (/independent|separat|same actor|proposer/i.test(message) && error?.code === 'GATE_DENIED') return '요청·평가·검토·승인은 서로 다른 사람이 기록해야 합니다.';
+    return serverErrorTexts[error?.code] ?? '요청을 처리하지 못했습니다.';
 }
 
 async function reload() {
@@ -169,7 +293,7 @@ function installBootstrap(bootstrap) {
     state.bootstrap = bootstrap;
     const actors = bootstrap.actors;
     if (!actors.some(actor => actor.id === state.actorId)) state.actorId = actors[0]?.id ?? '';
-    actorSelect.innerHTML = actors.map(actor => `<option value="${text(actor.id)}">${text(roleLabel(actor.role))} · ${text(actorDisplayName(actor))}</option>`).join('');
+    actorSelect.innerHTML = actors.map(actor => `<option value="${text(actor.id)}">${text(actorDisplayName(actor))}</option>`).join('');
     actorSelect.value = state.actorId;
     updateActorIdentity();
 }
@@ -255,45 +379,39 @@ function dismissToast() {
 }
 
 function changeButton(change) {
-    return `<button type="button" class="table-button" data-open-change="${text(change.id)}">상세 보기</button><details><summary>기록 ID</summary><span class="mono">${text(change.id)}</span></details>`;
+    return `<button type="button" class="table-button" data-open-change="${text(change.id)}">열기</button>`;
 }
 
-// Lifecycle steps for the Overview chain. Each saved change or incident sits on exactly one step by its stored state.
+// The six-step product flow. Every saved change sits on exactly one step by its stored state.
 const decisionChain = Object.freeze([
-    { ko: '변경 초안', en: 'Draft', change: ['Draft'] },
-    { ko: '제출·위험 분류', en: 'Submitted · Risk', change: ['Submitted', 'Risk Classified'] },
-    { ko: '계획·검증', en: 'Plan · Verification', change: ['Plan Approved', 'Verification In Progress', 'Needs Rework'] },
-    { ko: '증거 동결', en: 'Evidence Ready', change: ['Evidence Ready'] },
-    { ko: '독립 검토', en: 'Independent Review', change: ['Independent Review'] },
-    { ko: '변경 수용', en: 'Change Accepted', change: ['Accepted'] },
-    { ko: '이상 추적', en: 'Incident · Trace', incident: ['Open', 'Contained', 'Trace Proposed', 'Scope Reviewed'] },
-    { ko: 'CAPA', en: 'CAPA In Progress', incident: ['CAPA In Progress'] },
-    { ko: '효과성 확인', change: ['Effectiveness Monitoring'], incident: ['Effectiveness Check'] },
-    { ko: '종결', change: ['Closed'], incident: ['Closed'] },
-    { ko: '재개', change: ['Reopened'], incident: ['Reopened'] }
+    { ko: '변경', change: ['Draft', 'Submitted', 'Risk Classified', 'Plan Approved'] },
+    { ko: '검증', change: ['Verification In Progress', 'Needs Rework'] },
+    { ko: '근거', change: ['Evidence Ready'] },
+    { ko: '검토', change: ['Independent Review'] },
+    { ko: '수락', change: ['Accepted'] },
+    { ko: '효과성', change: ['Effectiveness Monitoring', 'Closed', 'Reopened'] }
 ]);
 
 function chainStepIndex(kind, stored) {
     return decisionChain.findIndex(step => (step[kind] ?? []).includes(stored));
 }
 
-// The current step is where the most recently saved record sits. No saved record means no current step.
+// The current step is where the most recently saved change sits. No saved change means no current step.
 function renderDecisionChain(data) {
-    const records = [
-        ...data.changes.map(item => ({ id: item.id, updatedAt: item.updated_at, index: chainStepIndex('change', item.state) })),
-        ...data.incidents.map(item => ({ id: item.id, updatedAt: item.updated_at, index: chainStepIndex('incident', item.state) }))
-    ].filter(item => item.index >= 0)
+    const records = data.changes.map(item => ({ id: item.id, updatedAt: item.updated_at, state: item.state,
+        index: chainStepIndex('change', item.state) }))
+        .filter(item => item.index >= 0)
         .sort((a, b) => a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : a.id < b.id ? -1 : 1);
     const latest = records[0] ?? null;
     const steps = decisionChain.map((step, index) => {
         const count = records.filter(item => item.index === index).length;
         const current = latest?.index === index;
-        return `<li class="workflow-step${current ? ' current' : ''}"${current ? ' aria-current="step"' : ''}><span class="step-no">${String(index + 1).padStart(2, '0')}</span><strong>${text(step.ko)}</strong><small>${number(count)}건${current ? ' · 현재 단계' : ''}</small></li>`;
+        return `<li class="workflow-step${current ? ' current' : ''}${count ? ' filled' : ''}"${current ? ' aria-current="step"' : ''}><span class="step-no">${String(index + 1).padStart(2, '0')}</span><strong>${text(step.ko)}</strong><small>${number(count)}건</small></li>`;
     }).join('');
     const summary = latest
-        ? `<p class="chain-summary">가장 최근 기록은 ${text(decisionChain[latest.index].ko)} 단계에 있습니다.</p>`
-        : '<p class="chain-summary">아직 저장된 결정 기록이 없습니다. 어떤 단계도 현재로 표시하지 않습니다.</p>';
-    return `<ol class="workflow decision-chain" aria-label="결정 사슬">${steps}</ol>${summary}`;
+        ? `<p class="chain-summary">최근 변경: ${text(data.changes.find(item => item.id === latest.id)?.title ?? '')} · ${text(stateLabel(latest.state))}</p>`
+        : '<p class="chain-summary">저장된 변경이 없습니다.</p>';
+    return `<ol class="workflow decision-chain" aria-label="변경 흐름">${steps}</ol>${summary}`;
 }
 
 function renderOverview() {
@@ -301,33 +419,35 @@ function renderOverview() {
     const metrics = data.metrics;
     const awaiting = data.changes.filter(change => ['Evidence Ready', 'Independent Review'].includes(change.state)).length;
     const active = data.changes.filter(change => !['Closed', 'Rejected'].includes(change.state)).length;
-    return `<section class="hero"><div class="hero-content"><p class="eyebrow">변경부터 결과까지</p>
-        <h1>기록이 판단을 증명합니다</h1>
-        <p>제조 변경의 위험 분류, 검증 기준, 측정 근거와 승인 결정을 하나의 이력으로 연결합니다. 이후 이상이 발생하면 영향 LOT과 관리 문서까지 추적합니다.</p>
-        <div class="hero-actions"><button type="button" class="button primary hero-start" data-view="changes">변경 관리 시작 →</button><button type="button" class="button subtle" data-view="fabtrace">FabTrace 보기 →</button></div></div>
-        <div class="hero-seal">CHANGE · EVIDENCE · DECISION</div></section>
+    const monitoring = data.changes.filter(change => change.state === 'Effectiveness Monitoring').length +
+        data.incidents.filter(item => item.state === 'Effectiveness Check').length;
+    const openIncidents = data.incidents.filter(item => item.state !== 'Closed').length;
+    return `<section class="hero"><div class="hero-content"><p class="eyebrow">변경 → 검증 → 근거 → 검토 → 수락 → 효과성</p>
+        <h1>변경이 끝났다고 말하지 않습니다</h1>
+        <p>무엇을, 어떤 근거로, 누가 판단했고, 그 판단이 이후 생산에서도 유지됐는지 기록합니다.</p>
+        <div class="hero-actions"><button type="button" class="button primary hero-start" data-view="changes">변경 관리 시작 →</button><button type="button" class="button subtle" data-view="fabtrace">영향 추적 →</button></div></div></section>
         <div class="stat-grid overview-stats">
-            <div class="stat-card emphasis"><span class="label">진행 중인 변경</span><strong class="value">${number(active)}</strong><span class="foot">위험·계획·증거가 연결된 변경 기록</span></div>
-            <div class="stat-card teal"><span class="label">독립 결정 대기</span><strong class="value">${number(awaiting)}</strong><span class="foot">검토자와 승인자는 서로 다른 역할</span></div>
-            <div class="stat-card muted"><span class="label">검사 단위</span><strong class="value">${number(metrics.inspectedUnits)}</strong><span class="foot">불량 ${number(metrics.rejectedUnits)} · 불량률 ${percent(metrics.rejectRate)}</span></div>
-            <div class="stat-card teal"><span class="label">설비 MTBF</span><strong class="value">${number(metrics.mtbfHours)} <small>h</small></strong><span class="foot">고장 ${number(metrics.failureCount)}건 · 관측 ${number(metrics.observationHours)} h</span></div>
+            <div class="stat-card emphasis"><span class="label">진행 중인 변경</span><strong class="value">${number(active)}</strong><span class="foot">종결 전 변경</span></div>
+            <div class="stat-card teal"><span class="label">독립 결정 대기</span><strong class="value">${number(awaiting)}</strong><span class="foot">근거 확정 · 독립 검토</span></div>
+            <div class="stat-card teal"><span class="label">효과성 확인 중</span><strong class="value">${number(monitoring)}</strong><span class="foot">수락 후 후속 LOT 확인</span></div>
+            <div class="stat-card muted"><span class="label">진행 중인 사건</span><strong class="value">${number(openIncidents)}</strong><span class="foot">검사 ${number(metrics.inspectedUnits)} · 불량률 ${percent(metrics.rejectRate)}</span></div>
         </div>
-        <div class="section-head"><div><h2>결정 흐름</h2><p>변경·이상 기록의 현재 단계를 보여줍니다. 각 결정의 역할과 근거는 이력에 남습니다.</p></div></div>
+        <div class="section-head"><div><h2>변경 흐름</h2></div></div>
         ${renderDecisionChain(data)}
-        <div class="section-head"><div><h2>대표 업무 흐름</h2><p>변경 검증부터 영향 추적과 효과성 확인까지 이어집니다.</p></div></div>
         <div class="three-column overview-paths">
-            <div class="card"><div class="card-kicker">변경 검증</div><h3>레시피·정렬 변경</h3><p>핵심 특성의 변경은 L3로 분류됩니다. 첫 측정이 불합격이면 기록을 보존하고 새 개정에서 다시 검증합니다.</p><div class="card-footer"><span class="scenario-tag">위험 분류 · 검증</span><button type="button" class="button subtle" data-view="changes">변경 관리 열기 →</button></div></div>
-            <div class="card"><div class="card-kicker">영향 추적</div><h3>정비 후 결함 이탈</h3><p>마지막 정상 관측(LKG), 노출 구간과 설비 이력으로 영향 LOT과 불확실성을 식별합니다.</p><div class="card-footer"><span class="scenario-tag">추적 · CAPA</span><button type="button" class="button subtle" data-view="fabtrace">FabTrace 열기 →</button></div></div>
-            <div class="card"><div class="card-kicker">효과성 확인</div><h3>이력을 지우지 않는 재개</h3><p>재발로 새 사이클을 시작해도 원래 범위, CAPA, 종결과 결정 이력을 보존합니다.</p><div class="card-footer"><span class="scenario-tag">모니터링 · 재개</span><button type="button" class="button subtle" data-view="fabtrace">흐름 확인하기 →</button></div></div>
+            <div class="card"><h3>불합격도 지우지 않습니다</h3><p>첫 검증이 기준을 넘으면 기록을 남긴 채 새 개정에서 다시 검증합니다.</p><button type="button" class="button subtle" data-view="changes">변경 관리 →</button></div>
+            <div class="card"><h3>요청자는 승인하지 못합니다</h3><p>요청·검증·검토·수락은 서로 다른 역할이 기록하고, 서버가 다시 검사합니다.</p><button type="button" class="button subtle" data-view="review">검토 대기열 →</button></div>
+            <div class="card"><h3>수락 뒤에도 다시 확인합니다</h3><p>후속 LOT 근거로 효과성을 판정하고, 재발하면 이전 결정을 보존한 채 재개합니다.</p><button type="button" class="button subtle" data-view="fabtrace">영향 추적 →</button></div>
         </div>
-        <div class="section-head"><div><h2>최근 변경 기록</h2><p>기록을 열어 결정과 연결된 근거를 확인합니다.</p></div><button type="button" class="button subtle" data-view="changes">전체 변경 보기 →</button></div>
+        <div class="section-head"><div><h2>최근 변경</h2></div><button type="button" class="button subtle" data-view="changes">전체 보기 →</button></div>
         ${data.changes.length ? renderChangeTable(data.changes.slice(0, 5))
-        : empty('아직 변경 기록이 없습니다', '변경 관리에서 새 변경을 등록하세요.')}`;
+        : empty('아직 변경 기록이 없습니다', '변경 관리에서 새 변경을 등록하세요.')}
+        ${data.incidents.length ? `<div class="section-head"><div><h2>최근 사건</h2></div><button type="button" class="button subtle" data-view="fabtrace">전체 보기 →</button></div>${renderIncidentTable(data.incidents.slice(0, 3))}` : ''}`;
 }
 
 function renderChangeTable(changes) {
     if (!changes.length) return empty('변경 기록이 없습니다', '새 변경을 등록해 검증을 시작하세요.');
-    return `<div class="table-wrap"><table><thead><tr><th>기록</th><th>변경</th><th>설비 / 레시피</th><th>상태</th><th>수정 시각 (UTC)</th></tr></thead><tbody>${changes.map(change => `<tr><td>${changeButton(change)}</td><td class="strong">${text(change.title)}</td><td><span class="mono">${text(change.equipment_id)}</span><br><span class="muted mono">${text(change.recipe_revision_id)}</span></td><td>${chip(change.state)}</td><td class="nowrap muted">${dateText(change.updated_at)}</td></tr>`).join('')}</tbody></table></div>`;
+    return `<div class="table-wrap"><table><thead><tr><th>변경</th><th>상태</th><th>설비 / 레시피</th><th>수정 시각 (UTC)</th><th><span class="visually-hidden">상세</span></th></tr></thead><tbody>${changes.map(change => `<tr><td class="strong">${text(change.title)}</td><td>${chip(change.state)}</td><td><span class="mono nowrap">${text(change.equipment_id)}</span> · <span class="muted mono nowrap">${text(change.recipe_revision_id)}</span></td><td class="nowrap muted">${dateText(change.updated_at)}</td><td class="nowrap">${changeButton(change)}</td></tr>`).join('')}</tbody></table></div>`;
 }
 
 // Seeded Line B L1 module contrast (see tests/phase3-l1-contrast). Scope, baseline and times are fixed by the seed:
@@ -394,12 +514,12 @@ function renderChanges() {
         'Quality Engineer', 'Production Manager'].includes(proposer?.role);
     return `<div class="page-heading"><div><p class="eyebrow">변경 관리</p><h1>변경 검증</h1><p>범위를 분류하고 검증 계획, 원천 근거와 승인 결정을 연결합니다.</p></div></div>
         <div class="panel-grid"><div class="stack"><div class="section-head no-top-margin"><div><h2>변경 목록</h2><p>${number(state.bootstrap.changes.length)}건</p></div></div>${renderChangeTable(state.bootstrap.changes)}</div>
-        <aside class="card"><div class="card-kicker">새 변경</div><h2>변경 등록</h2><p>대상 레시피와 변경 이유를 입력하세요.</p>
+        <aside class="card"><h2>변경 등록</h2><p>대상 레시피와 변경 이유를 입력하세요.</p>
             <form id="create-change-form" class="form-grid"><label>제목<input name="title" required maxlength="120" value="정렬 레시피 변경 검증"></label>
-            <label>대상 레시피<select name="recipe"><option value="REC-ALIGN-R2">R2 · 정렬 변경</option><option value="REC-ALIGN-R3">R3 · 개선된 정렬 기준</option><option value="REC-B-R2">Line B · 모듈 교체 L1 검증</option></select></label>
+            <label>대상 레시피<select name="recipe"><option value="REC-ALIGN-R2">R2 · 정렬 변경</option><option value="REC-ALIGN-R3">R3 · 개선된 정렬 기준</option><option value="REC-B-R2">라인 B · 모듈 교체 L1 검증</option></select></label>
             <label>변경 이유<textarea name="reason" required maxlength="400">정렬 편차를 줄이고 AOI 검증을 유지합니다.</textarea></label>
-            <details><summary>대상 범위와 연결된 근거</summary><div class="hint-box"><strong>R2 / R3:</strong> LINE-A / EQ-ALIGN-A / MOD-ALIGN-A · 기준 AOI-A-001.<br><strong>Line B L1:</strong> LINE-B / EQ-ALIGN-B / MOD-ALIGN-B-R2 · REC-B-R2 · 기준 AOI-B-002. 모듈 변경 EV-B-MODULE과 이후 LOT-B-003~005가 연결됩니다.</div></details>
-            ${mayPropose ? '' : '<div class="warning-box">변경을 등록할 수 있는 역할을 선택하세요.</div>'}
+            <details><summary>대상 범위와 연결된 근거</summary><div class="hint-box"><strong>R2 / R3:</strong> LINE-A / EQ-ALIGN-A / MOD-ALIGN-A · 기준 AOI-A-001.<br><strong>라인 B L1:</strong> LINE-B / EQ-ALIGN-B / MOD-ALIGN-B-R2 · REC-B-R2 · 기준 AOI-B-002. 모듈 변경 EV-B-MODULE과 이후 LOT-B-003~005가 연결됩니다.</div></details>
+            ${mayPropose ? '' : '<p class="muted">제조·설비·품질 엔지니어 또는 생산 관리자로 전환하세요.</p>'}
             <button type="submit" class="button primary" ${mayPropose ? '' : 'disabled'}>변경 등록 →</button></form></aside></div>`;
 }
 
@@ -423,7 +543,7 @@ function actionFor(detail) {
     const at = fixed => decisionAt(detail, fixed);
     if (change.state === 'Draft') return { action: 'submitChange', input: { ...base, at: guided?.submit ?? at(`${day}T12:10:00.000Z`) }, label: 'Submit change', role: 'Proposer' };
     if (change.state === 'Submitted') return { action: 'classifyChange', input: { ...base, assessmentId: `RISK-${id}-R${change.current_revision_no}`, riskInputs: guided ? lineBL1RiskInputs : riskInputs, at: guided?.classify ?? at(`${day}T12:20:00.000Z`) }, label: guided ? 'Classify with R06 · L1' : 'Classify with R02', role: 'Quality Engineer',
-        ...(guided ? { description: 'Line B 모듈 변경: 심각도·발생도·검출도·범위가 각각 1이며, 핵심 특성과 안전 영향은 없습니다. 적용 규칙과 위험 수준이 기록됩니다.' } : {}) };
+        ...(guided ? { description: '라인 B 모듈 변경: 심각도·발생도·검출도·범위가 각각 1이며, 핵심 특성과 안전 영향은 없습니다. 적용 규칙과 위험 수준이 기록됩니다.' } : {}) };
     if (change.state === 'Risk Classified') return { action: 'approvePlan', input: { ...base, planId: `PLAN-${id}-R${change.current_revision_no}`, at: guided?.plan ?? at(`${day}T12:30:00.000Z`) }, label: 'Approve verification plan', role: 'Quality Engineer' };
     if (change.state === 'Plan Approved') return { action: 'startVerification', input: { ...base, at: guided?.start ?? at(`${verificationDay}T08:00:00.000Z`) }, label: 'Start verification', role: 'Verification Engineer' };
     if (change.state === 'Verification In Progress') {
@@ -594,46 +714,108 @@ function actorEligible(next, detail) {
 
 function renderCriteria(revision) {
     if (!revision.criteria.length) return empty('검증 기준 미설정', '검증 계획이 승인되면 기준을 확인할 수 있습니다.');
-    return `<div class="table-wrap"><table><thead><tr><th>기준</th><th>허용 한계</th><th>관측값</th><th>판정</th></tr></thead><tbody>${revision.criteria.map(criterion => {
+    return `<div class="table-wrap"><table class="criteria-table"><thead><tr><th>기준</th><th>허용 한계</th><th>관측값</th><th>판정</th></tr></thead><tbody>${revision.criteria.map(criterion => {
         const result = revision.results.find(item => item.plan_id === criterion.plan_id && item.criterion_code === criterion.code);
-        return `<tr><td class="strong">${text(criterion.code)}</td><td class="mono">${text(criterion.comparison)} ${text(criterion.threshold ?? '—')} ${text(criterion.unit ?? '')}</td><td class="mono">${result ? text(result.observed_value ?? '—') + ' ' + text(result.unit ?? '') : '—'}</td><td>${result ? `<span class="${result.passed ? 'result-pass' : 'result-fail'}">${result.passed ? 'PASS' : 'FAIL'}</span>` : '<span class="muted">Pending</span>'}</td></tr>`;
+        return `<tr><td><strong>${text(criterionNames[criterion.code] ?? criterion.code)}</strong> <span class="muted mono">${text(criterion.code)}</span></td><td class="mono nowrap">${text(limitText(criterion))}</td><td class="mono nowrap">${result ? text(unitValue(result.observed_value, result.unit ?? criterion.unit)) : '—'}</td><td>${result ? `<span class="${result.passed ? 'result-pass' : 'result-fail'}">${result.passed ? '합격' : '불합격'}</span>` : '<span class="muted">대기</span>'}</td></tr>`;
     }).join('')}</tbody></table></div>`;
 }
 
+const evidenceKindNames = Object.freeze({ 'equipment-event': '설비 이벤트', 'aoi-inspection': 'AOI 검사',
+    measurement: '측정', 'capa-review': 'CAPA 검토' });
+const evidenceTypeNames = Object.freeze({ 'baseline-set': '기준 LOT', measurement: '정렬 측정', aoi: 'AOI 검사',
+    'module-change': '모듈 변경' });
+
 function renderEvidence(revision) {
     if (!revision.evidence.length) return empty('연결된 근거 없음', '검증 담당자가 측정·AOI 원천 기록을 연결하면 여기에 표시됩니다.');
-    return `<details><summary class="button">연결된 근거 ${number(revision.evidence.length)}건 보기</summary>
-        <div class="table-wrap evidence-gap"><table><thead><tr><th>근거 ID</th><th>유형 / 원천</th><th>관측값</th><th>기록 시각 (UTC)</th><th>검증값</th></tr></thead><tbody>${revision.evidence.map(item => {
+    const measurements = revision.evidence.filter(item => item.source_table === 'measurements').length;
+    const inspections = revision.evidence.filter(item => item.evidence_type === 'aoi').length;
+    const summary = [measurements ? `측정 ${number(measurements)}건` : '', inspections ? `AOI 검사 ${number(inspections)}건` : '']
+        .filter(Boolean).join(' · ');
+    return `<details><summary class="button">연결된 근거 ${number(revision.evidence.length)}건${summary ? ` · ${text(summary)}` : ''}</summary>
+        <div class="table-wrap evidence-gap"><table><thead><tr><th>유형</th><th>관측값</th><th>LOT</th><th>기록 시각 (UTC)</th><th>원천 · 검증값</th></tr></thead><tbody>${revision.evidence.map(item => {
             const source = item.source;
             const baseline = item.evidence_type === 'baseline-set' && Array.isArray(item.payload?.lotIds) ? item.payload : null;
             const observation = baseline
-                ? `${baseline.lotIds.join(', ')} · ${baseline.sampledUnits} samples · ${baseline.rejectedUnits}/${baseline.inspectedUnits} AOI rejects · max ${baseline.maxAbsOffset} mm` :
-                source?.value != null ? `${source.value} ${source.unit ?? ''} · ${source.lot_id ?? ''}` :
-                    source?.rejected_units != null ? `${source.rejected_units}/${source.inspected_units} rejects · ${source.lot_id ?? ''}` : source?.id ?? 'Embedded note';
-            return `<tr><td class="mono">${text(item.id)}</td><td>${text(item.evidence_type)}<br><span class="muted mono">${text(item.source_table)} / ${text(item.source_id)}</span></td><td>${text(observation)}</td><td class="muted">${dateText(item.recorded_at)}</td><td class="mono" title="${text(item.sha256)}">${text(shortHash(item.sha256))}</td></tr>`;
+                ? `측정 ${baseline.sampledUnits}건 · AOI 불량 ${baseline.rejectedUnits}/${baseline.inspectedUnits} · 최대 ${baseline.maxAbsOffset} mm` :
+                source?.value != null ? `${source.value} ${source.unit ?? ''}` :
+                    source?.rejected_units != null ? `불량 ${source.rejected_units}/${source.inspected_units}` : '기록 메모';
+            const lot = baseline ? baseline.lotIds.join(', ') : source?.lot_id ?? '—';
+            return `<tr><td>${text(evidenceTypeNames[item.evidence_type] ?? item.evidence_type)}</td><td class="nowrap">${text(observation)}</td><td class="mono nowrap">${text(lot)}</td><td class="muted nowrap">${dateText(item.recorded_at)}</td><td class="mono muted" title="${text(item.sha256)}">${text(item.source_id ?? item.id)} · ${text(shortHash(item.sha256))}</td></tr>`;
         }).join('')}</tbody></table></div></details>`;
+}
+
+function acceptanceLine(item) {
+    const status = item.status;
+    if (status?.classificationRequired) return '분류 확인 필요 · 운영 승인에 사용할 수 없음';
+    if (status?.type === 'Conditional') return `조건부 수락 · ${status.expired ? '만료됨' : '유효'} · ${status.condition} · 만료 ${timeText(status.expiresAt)}`;
+    return `일반 수락 · ${actorLabel(item.approver_actor_id)} · ${timeText(item.accepted_at)}`;
 }
 
 function renderRevision(revision, isCurrent, detail) {
     const risk = revision.risk;
     const plan = revision.plans.at(-1);
-    const acceptanceSummary = revision.acceptances.map(item => {
-        const status = item.status;
-        if (status?.classificationRequired) return '분류 확인 필요 · 운영 승인에 사용할 수 없음';
-        if (status?.type === 'Conditional') return `조건부 수락 · ${status.expired ? '만료됨' : '유효'} · ${status.condition} · 만료 ${status.expiresAt} (UTC)`;
-        return `일반 수락 · ${item.accepted_at} (UTC)`;
-    }).join(' / ') || '기록 없음';
-    return `<section class="revision-card${isCurrent ? ' current' : ''}"><div class="revision-head"><strong>개정 R${number(revision.revision.revision_no)} ${isCurrent ? '· 현재' : '· 이전 이력'}</strong>${risk ? `<span class="risk-chip${plan?.final_level === 'L1' ? ' low' : ''}">${text(plan?.final_level ?? risk.computed_level)} · ${text(risk.matched_rule)}</span>` : '<span class="small-chip">위험 분류 대기</span>'}</div>
-        <div class="revision-body"><div class="field-grid">${row('개정 이유', revision.revision.reason)}${row('등록 시각 (UTC)', dateText(revision.revision.created_at))}${row('적용 위험 규칙', risk ? `${risk.matched_rule} / ${risk.rule_version} / score ${risk.score}` : '대기 중')}</div><details><summary>기술 정보</summary><div class="field-grid">${row('승인 계획 ID', plan?.id ?? '없음')}${row('개정 ID', revision.revision.id)}</div></details>
-        ${revision.overrides.length ? `<div class="warning-box top-gap"><strong>위험 등급 조정:</strong> ${revision.overrides.map(item => `${text(item.from_level)} → ${text(item.to_level)} · ${text(item.rationale)} · 요청 ${text(item.requester_actor_id)}${item.approver_actor_id ? ` · 승인 ${text(item.approver_actor_id)}` : ''}`).join('<br>')}</div>` : ''}
+    const acceptanceSummary = revision.acceptances.map(acceptanceLine).join(' / ') || '기록 없음';
+    const failed = revision.results.some(item => item.passed === 0);
+    return `<section class="revision-card${isCurrent ? ' current' : ''}${failed ? ' failed' : ''}"><div class="revision-head"><strong>개정 R${number(revision.revision.revision_no)} ${isCurrent ? '· 현재' : '· 이전 이력'}</strong>${risk ? `<span class="risk-chip${plan?.final_level === 'L1' ? ' low' : ''}">${text(riskText(plan?.final_level ?? risk.computed_level, risk.matched_rule))}</span>` : '<span class="small-chip">위험 분류 대기</span>'}</div>
+        <div class="revision-body"><div class="field-grid">${row('개정 이유', revision.revision.reason)}${row('등록 시각 (UTC)', timeText(revision.revision.created_at))}</div>
+        ${revision.overrides.length ? `<div class="warning-box top-gap"><strong>위험 등급 조정:</strong> ${revision.overrides.map(item => `${text(item.from_level)} → ${text(item.to_level)} · ${text(item.rationale)} · 요청 ${text(actorLabel(item.requester_actor_id))}${item.approver_actor_id ? ` · 승인 ${text(actorLabel(item.approver_actor_id))}` : ''}`).join('<br>')}</div>` : ''}
         <h4>검증 기준</h4>${renderCriteria(revision)}<h4>연결된 근거</h4>${renderEvidence(revision)}
-        <h4>독립 결정</h4>${revision.reviews.length || revision.acceptances.length ? `<div class="field-grid">${row('검토', revision.reviews.map(item => `${item.decision} · ${item.reason}`).join(' / ') || '대기 중')}${row('수락', acceptanceSummary)}</div><details><summary>승인 상세</summary>${revision.acceptances.map(item => row('수락 ID / 승인자', `${item.id} / ${item.approver_actor_id}`)).join('')}</details>${revision.acceptances.some(item => item.status?.classificationRequired) ? '<div class="warning-box top-gap">분류 확인 필요 · 과거 수락 유형이 기록되지 않아 현재 운영 승인에 사용할 수 없습니다. 원본과 감사 이력은 조회할 수 있습니다.</div>' : ''}` : '<p>아직 검토 또는 승인 기록이 없습니다.</p>'}
+        <h4>독립 결정</h4>${revision.reviews.length || revision.acceptances.length ? `<div class="field-grid">${row('검토', revision.reviews.map(item => `${stateLabel(item.decision)} · ${actorLabel(item.reviewer_actor_id)} · ${item.reason}`).join(' / ') || '대기 중')}${row('수락', acceptanceSummary)}</div>${revision.acceptances.some(item => item.status?.classificationRequired) ? '<div class="warning-box top-gap">분류 확인 필요 · 과거 수락 유형이 기록되지 않아 현재 운영 승인에 사용할 수 없습니다. 원본과 감사 이력은 조회할 수 있습니다.</div>' : ''}` : '<p class="muted">검토·수락 기록 없음</p>'}
         ${renderChangeMonitoringLedger(revision, detail)}</div></section>`;
 }
 
-function renderAudit(events) {
+// Consecutive records of the same action by the same actor collapse into one line. Stored records are unchanged.
+// Measurement and AOI source links made in one sitting read as one linking step.
+const auditFamily = action => ['measurement-evidence-added', 'aoi-evidence-added'].includes(action) ? 'source-linked' : action;
+function groupAudit(events) {
+    const groups = [];
+    for (const item of events) {
+        const last = groups.at(-1);
+        if (last && last.family === auditFamily(item.action) && last.actor === (item.actor_id ?? item.system_principal_id) &&
+            last.newState === (item.new_state ?? null)) {
+            last.items.push(item);
+            continue;
+        }
+        groups.push({ action: item.action, family: auditFamily(item.action), actor: item.actor_id ?? item.system_principal_id,
+            newState: item.new_state ?? null, role: item.simulated_role, items: [item] });
+    }
+    return groups;
+}
+
+function auditGroupTitle(group) {
+    const count = group.items.length;
+    if (group.family === 'source-linked') {
+        const measurements = group.items.filter(item => item.action === 'measurement-evidence-added').length;
+        const inspections = count - measurements;
+        if (measurements && inspections) return `원천 근거 연결 × ${number(count)} (측정 ${number(measurements)} · AOI ${number(inspections)})`;
+    }
+    const label = auditActionLabels[group.action] ?? '결정 기록';
+    const title = count > 1 ? `${label} × ${number(count)}` : label;
+    if (!group.newState) return title;
+    const stateText = stateLabel(group.newState);
+    const core = stateText.replace(/(됨| 중)$/, '');
+    return label.includes(core) || core.includes(label) ? title : `${title} → ${stateText}`;
+}
+
+function renderAuditGroup(group) {
+    const first = group.items[0];
+    const last = group.items.at(-1);
+    const count = group.items.length;
+    const when = count > 1 && first.recorded_at !== last.recorded_at
+        ? `${shortTime(first.recorded_at)}–${first.recorded_at.slice(0, 10) === last.recorded_at.slice(0, 10) ? timeText(last.recorded_at).slice(11) : shortTime(last.recorded_at)}`
+        : timeText(first.recorded_at);
+    const who = group.actor ? actorLabel(group.actor) : roleLabel(group.role);
+    const detailRows = (count > 3 ? [first, last] : group.items).map(item => `<span class="muted mono">${text(item.id)} · ${text(item.action)} · ${text(item.actor_id ?? item.system_principal_id)} · ${text(item.entity_revision_id ?? '—')}</span><span class="muted mono" title="${text(item.digest)}">CHAIN ${text(shortHash(item.digest))} · PRIOR ${text(shortHash(item.previous_digest))}</span>`).join('');
+    return `<li><strong>${text(auditGroupTitle(group))}</strong><span class="muted">${text(who)} · ${text(when)}</span><details><summary>감사 상세</summary>${count > 3 ? `<span class="muted">${number(count)}건 중 처음과 마지막 기록</span>` : ''}${detailRows}</details></li>`;
+}
+
+// Latest groups first. Older groups stay one click away.
+function renderAudit(events, visible = 12) {
     if (!events?.length) return empty('감사 기록 없음', '결정이 저장되면 감사 이력이 표시됩니다.');
-    return `<ol class="audit-list">${events.map(item => `<li><strong>${text(auditActionLabels[item.action] ?? '결정 기록')} ${item.new_state ? `· ${text(labelFor(labels.states, item.new_state) ?? item.new_state)}` : ''}</strong><span class="muted">${dateText(item.recorded_at)} · ${text(roleLabel(item.simulated_role))}</span><details><summary>감사 상세</summary><span class="muted mono">${text(item.id)} · ${text(item.action)} · ${text(item.actor_id ?? item.system_principal_id)} · ${text(item.entity_revision_id ?? '—')}</span><span class="muted mono" title="${text(item.digest)}">CHAIN ${text(item.digest)} · PRIOR ${text(item.previous_digest)}</span></details></li>`).join('')}</ol>`;
+    const groups = groupAudit(events).reverse();
+    const recent = groups.slice(0, visible);
+    const older = groups.slice(visible);
+    return `<p class="audit-count muted">원본 기록 ${number(events.length)}건 · 최근 순 · 시각 UTC</p><ol class="audit-list">${recent.map(renderAuditGroup).join('')}</ol>${older.length ? `<details class="audit-more"><summary class="button subtle">전체 보기 · 이전 ${number(older.length)}개 항목</summary><ol class="audit-list">${older.map(renderAuditGroup).join('')}</ol></details>` : ''}`;
 }
 
 // Shared "다음 허용 단계" card. A blocked gate keeps its button focusable and links it to the visible reason.
@@ -641,7 +823,7 @@ function renderNextStepCard(prefix, next, blockReason) {
     const actor = state.bootstrap.actors.find(item => item.id === state.actorId);
     const titleId = `${prefix}-next-step-title`;
     const reasonId = `${prefix}-gate-block-reason`;
-    const card = `<div class="next-step-card${blockReason ? ' blocked' : ''}" role="group" aria-labelledby="${titleId}"><p class="next-step-kicker" id="${titleId}">다음 작업</p><strong class="next-step-action">${text(actionLabel(next))}</strong><dl class="next-step-facts"><div><dt>필요 역할</dt><dd>${text(roleDisplay(next.role))}</dd></div><div><dt>현재 역할</dt><dd>${text(actor ? roleLabel(actor.role) : '—')}</dd></div></dl>${blockReason ? `<p class="next-step-reason" id="${reasonId}"><strong>차단 사유:</strong> ${text(blockReason)}</p>` : '<p class="next-step-ready">진행 가능</p>'}</div>`;
+    const card = `<div class="next-step-card${blockReason ? ' blocked' : ''}" role="group" aria-labelledby="${titleId}"><p class="next-step-kicker" id="${titleId}">다음 작업</p><strong class="next-step-action">${text(actionLabel(next))}</strong><dl class="next-step-facts"><div><dt>필요 역할</dt><dd>${text(roleDisplay(next.role))}</dd></div><div><dt>현재 역할</dt><dd>${text(actor ? actorDisplayName(actor) : '—')}</dd></div></dl>${blockReason ? `<p class="next-step-reason" id="${reasonId}"><strong>차단 사유:</strong> ${text(blockReason)}</p>` : '<p class="next-step-ready">진행 가능</p>'}</div>`;
     const gateState = blockReason ? `aria-disabled="true" aria-describedby="${reasonId}"` : '';
     return { card, gateState };
 }
@@ -655,10 +837,11 @@ function changeBlockReason(next, detail) {
     const change = detail.change;
     const proposer = change.proposer_actor_id;
     const current = detail.revisions.at(-1);
-    const wrongRole = role => `이 작업은 ${roleLabel(role)} 역할에서 수행할 수 있습니다.`;
+    const task = actionLabel(next);
+    const wrongRole = role => cannotDo(actor, task, roleDisplay(role));
     if (['submitChange', 'reviseFailedChange', 'reviseExpiredChange',
         'reviseFailedEffectivenessChange'].includes(next.action)) {
-        return '이 변경을 등록한 요청자만 다음 단계로 진행할 수 있습니다.';
+        return `이 변경의 요청자만 ${withObject(task)} 할 수 있습니다. ${withDirection(actorLabel(proposer))} 전환하세요.`;
     }
     if (next.action === 'classifyChange') return wrongRole('Quality Engineer');
     if (next.action === 'approvePlan') {
@@ -672,8 +855,8 @@ function changeBlockReason(next, detail) {
     }
     if (next.action === 'classifyLegacyAcceptance') return wrongRole('Approver');
     if (next.action === 'acceptChange') {
+        if (actor.id === proposer) return `요청자는 자신의 변경을 수락할 수 없습니다. 승인자로 전환하세요.`;
         if (actor.role !== 'Approver') return wrongRole('Approver');
-        if (actor.id === proposer) return '요청자는 자신의 변경을 수락할 수 없습니다.';
         if (current.evidence.some(item => item.recorded_by === actor.id)) {
             return '근거를 기록한 사람은 같은 개정을 수락할 수 없습니다.';
         }
@@ -684,15 +867,15 @@ function changeBlockReason(next, detail) {
 
 function renderGateControls(next, eligible, detail) {
     if (!next && changeMonitoringStates.includes(detail.change.state)) {
-        return '<div class="hint-box">효과성 확인·종결·재개 작업은 아래의 효과성 모니터링에서 진행합니다.</div>';
+        return '<a class="button subtle" href="#change-monitoring-title">효과성 확인으로 이동 ↓</a>';
     }
-    if (!next) return '<div class="hint-box">현재 단계에서 가능한 작업이 없습니다. 이전 기록은 계속 조회할 수 있습니다.</div>';
+    if (!next) return '<p class="muted">현재 단계에서 진행할 작업이 없습니다.</p>';
     const blockReason = eligible ? null : changeBlockReason(next, detail);
     const { card, gateState } = renderNextStepCard('change', next, blockReason);
     return `${card}
         ${next.description ? `<details class="top-gap"><summary>작업 근거</summary><div class="hint-box">${text(next.description)}</div></details>` : ''}
-        ${next.needsReason ? '<label class="gate-reason">판단 이유<textarea id="gate-reason" required maxlength="500" placeholder="근거와 판단 이유를 입력하세요"></textarea></label>' : ''}
-        ${['acceptChange', 'classifyLegacyAcceptance'].includes(next.action) ? `<div class="field-grid top-gap"><label>수락 유형<select id="acceptance-type" required><option value="" selected>선택하세요</option><option value="Ordinary">일반 수락</option><option value="Conditional">조건부 수락</option></select></label><label>조건 (조건부 수락)<textarea id="acceptance-condition" maxlength="500" placeholder="적용 조건을 구체적으로 입력하세요"></textarea></label><label>만료 시각 (UTC, 조건부 수락)<input id="acceptance-expiry" type="text" placeholder="YYYY-MM-DDTHH:MM:SS.000Z" autocomplete="off"></label></div><p class="muted">시간대: UTC · 조건부 수락에는 명시적 만료 시각이 필요합니다.</p>` : ''}
+        ${blockReason ? '' : next.needsReason ? '<label class="gate-reason">판단 이유<textarea id="gate-reason" required maxlength="500" placeholder="근거와 판단 이유를 입력하세요"></textarea></label>' : ''}
+        ${!blockReason && ['acceptChange', 'classifyLegacyAcceptance'].includes(next.action) ? `<div class="form-grid acceptance-terms top-gap"><label>수락 유형<select id="acceptance-type" required><option value="" selected>선택하세요</option><option value="Ordinary">일반 수락</option><option value="Conditional">조건부 수락</option></select></label><label>조건 (조건부 수락)<textarea id="acceptance-condition" maxlength="500" placeholder="적용 조건을 구체적으로 입력하세요"></textarea></label><label>만료 시각 (UTC, 조건부 수락)<input id="acceptance-expiry" type="text" placeholder="YYYY-MM-DDTHH:MM:SS.000Z" autocomplete="off"></label></div><p class="muted">조건부 수락은 만료 시각(UTC)이 필요합니다.</p>` : ''}
         <button type="button" class="button primary top-gap" data-action="next-gate" ${gateState}>${text(actionLabel(next))} →</button>`;
 }
 
@@ -721,38 +904,38 @@ function changeCheckChip(status) {
 
 function renderChangeCheck(check, event) {
     const payload = event?.payload ?? null;
-    const reasons = Array.isArray(payload?.reasons) && payload.reasons.length ? payload.reasons : [check.reason].filter(Boolean);
+    const reasons = (Array.isArray(payload?.reasons) ? payload.reasons : check.passed ? [] : findingsFrom(check.reason)).map(findingLabel);
     const runs = Array.isArray(payload?.sourceRunIds) ? payload.sourceRunIds : [];
     const aois = Array.isArray(payload?.aoiInspectionIds) ? payload.aoiInspectionIds : [];
     const path = payload ? `<ol class="monitoring-path" aria-label="평가 경로">
-        <li>평가 구간 ${dateText(check.window_start)} → ${dateText(check.window_end)}</li>
+        <li>평가 구간 ${dateText(check.window_start)} → ${dateText(check.window_end)} (UTC)</li>
         <li>후속 LOT ${number(check.lot_count)} / 필요 ${number(payload.requiredLots)}</li>
         <li>공정 실행 ${number(runs.length)}건 · AOI 검사 ${number(aois.length)}건</li></ol>`
         : '<p class="muted">연결된 평가 감사 기록을 확인할 수 없습니다.</p>';
     return `<li class="ledger-entry" data-change-check-id="${text(check.id)}"><div class="ledger-entry-head"><span class="ledger-kind">효과성 평가</span>${changeCheckChip(payload?.status)}</div>
         ${ledgerBlock('평가 경로', path)}
-        <div class="field-grid">${ledgerFact('평가자 · 시각', `${check.recorded_by} · ${dateText(check.recorded_at)}`)}${ledgerFact('후속 LOT', `${number(check.lot_count)}건${payload?.requiredLots != null ? ` · 필요 ${number(payload.requiredLots)}건` : ''}${payload?.observedCalendarDays != null ? ` · ${number(payload.observedCalendarDays)}일` : ''}`)}${ledgerFact('AOI 검사 / 불합격', `${number(payload?.inspectedUnits)} / ${number(payload?.rejectedUnits)}`)}${ledgerFact('대상 / 중대 결함', `${number(payload?.targetedDefects)} / ${number(payload?.criticalDefects)}`)}</div>
-        ${ledgerBlock('판정 근거', reasons.length ? `<ul class="gap-list">${reasons.map(reason => `<li>${text(reason)}</li>`).join('')}</ul>` : '<p>미충족 요건 없음</p>')}
+        <div class="field-grid">${ledgerFact('평가자 · 시각', `${actorLabel(check.recorded_by)} · ${timeText(check.recorded_at)}`)}${ledgerFact('후속 LOT', `${number(check.lot_count)}건${payload?.requiredLots != null ? ` · 필요 ${number(payload.requiredLots)}건` : ''}${payload?.observedCalendarDays != null ? ` · ${number(payload.observedCalendarDays)}일` : ''}`)}${ledgerFact('AOI 검사 / 불량', `${number(payload?.inspectedUnits)} / ${number(payload?.rejectedUnits)}`)}${ledgerFact('대상 / 중대 결함', `${number(payload?.targetedDefects)}건 / ${number(payload?.criticalDefects)}건`)}</div>
+        ${ledgerBlock('판정 근거', reasons.length ? `<ul class="gap-list">${reasons.map(reason => `<li>${text(reason)}</li>`).join('')}</ul>` : '<p>모든 요건 충족</p>')}
         <details><summary>상세 근거</summary><div class="field-grid">${ledgerFact('확인 ID', check.id, true)}${ledgerFact('수락 · 계획 · 사이클', payload ? `${payload.acceptanceId ?? '—'} · ${payload.planId ?? '—'} · ${payload.cycleNo ?? '—'}` : '—', true)}</div>${ledgerBlock(`LOT ID (${number(payload?.sourceLotIds?.length ?? 0)})`, idChips(payload?.sourceLotIds))}${ledgerBlock(`공정 실행 ID (${number(runs.length)})`, idChips(runs))}${ledgerBlock(`AOI 검사 ID (${number(aois.length)})`, idChips(aois))}${payload && (payload.unresolvedAlarmIds?.length || payload.blockingDeviationIds?.length) ? ledgerBlock('미해결 경보 / 차단 편차', idChips([...(payload.unresolvedAlarmIds ?? []), ...(payload.blockingDeviationIds ?? [])])) : ''}${ledgerBlock('원천 검증값', `<span class="digest">${text(payload?.sourceDigest ?? '—')}</span>`)}${event ? ledgerBlock('감사 기록', `<p class="mono">${text(event.id)} · CHAIN ${text(shortHash(event.digest))} · PRIOR ${text(shortHash(event.previous_digest))}</p>`) : ''}</details></li>`;
 }
 
 function renderChangeDecision(event) {
     const payload = event.payload ?? {};
-    const who = ledgerFact('결정자 · 시각', `${event.actor_id ?? event.system_principal_id ?? '—'} · ${dateText(event.recorded_at)}`);
+    const who = ledgerFact('결정자 · 시각', `${actorLabel(event.actor_id ?? event.system_principal_id)} · ${timeText(event.recorded_at)}`);
     const reason = ledgerBlock('판단 이유', `<p>${text(event.reason ?? '—')}</p>`);
-    const head = (ko, en, id, status) => `<div class="ledger-entry-head"><span class="ledger-kind">${ko}</span>${status}<details><summary>결정 ID</summary><span class="mono">${text(id)}</span></details></div>`;
+    const head = (ko, en, id, status) => `<div class="ledger-entry-head"><span class="ledger-kind">${ko}</span>${status}</div>`;
     if (event.action === 'change-monitoring-closed') {
         return `<li class="ledger-entry" data-change-decision-id="${text(payload.decisionId ?? event.id)}">${head('종결 결정', 'Closure decision', payload.decisionId ?? event.id, chip('Closed'))}
-            <div class="field-grid">${who}${ledgerFact('합격 확인', payload.checkId, true)}${ledgerFact('수락', payload.acceptanceId, true)}${ledgerFact('모니터링 사이클', payload.cycleNo)}</div>
-            ${reason}<details><summary>상세 근거</summary>${ledgerBlock('원천 검증값', `<span class="digest">${text(payload.sourceDigest ?? '—')}</span>`)}</details></li>`;
+            <div class="field-grid">${who}${ledgerFact('확인 회차', payload.cycleNo)}</div>
+            ${reason}<details><summary>상세 근거</summary><div class="field-grid">${ledgerFact('결정 ID', payload.decisionId ?? event.id, true)}${ledgerFact('합격 확인', payload.checkId, true)}${ledgerFact('수락', payload.acceptanceId, true)}</div>${ledgerBlock('원천 검증값', `<span class="digest">${text(payload.sourceDigest ?? '—')}</span>`)}</details></li>`;
     }
     if (event.action === 'change-monitoring-reopened') {
         return `<li class="ledger-entry" data-change-decision-id="${text(payload.decisionId ?? event.id)}">${head('재개 결정', 'Reopen decision', payload.decisionId ?? event.id, chip('Reopened'))}
-            <div class="field-grid">${who}${ledgerFact('불합격 확인', payload.failedCheckId, true)}${ledgerFact('이전 종결', payload.priorClosureId ?? '종결 전 재개', Boolean(payload.priorClosureId))}${ledgerFact('사이클', `${payload.priorCycleNo ?? '—'} → ${payload.nextCycleNo ?? '—'}`)}${ledgerFact('재발 근거 (AOI 결함)', payload.recurrenceAoiDefectId ?? '기록 없음', Boolean(payload.recurrenceAoiDefectId))}${ledgerFact('보존된 수락', payload.acceptanceId, true)}</div>
-            ${reason}<details><summary>상세 근거</summary>${ledgerBlock('원천 검증값', `<span class="digest">${text(payload.sourceDigest ?? '—')}</span>`)}</details></li>`;
+            <div class="field-grid">${who}${ledgerFact('확인 회차', `${payload.priorCycleNo ?? '—'} → ${payload.nextCycleNo ?? '—'}`)}${ledgerFact('이전 종결', payload.priorClosureId ? '보존됨' : '종결 전 재개')}${ledgerFact('재발 근거 (AOI 결함)', payload.recurrenceAoiDefectId ?? '기록 없음', Boolean(payload.recurrenceAoiDefectId))}</div>
+            ${reason}<details><summary>상세 근거</summary><div class="field-grid">${ledgerFact('결정 ID', payload.decisionId ?? event.id, true)}${ledgerFact('불합격 확인', payload.failedCheckId, true)}${ledgerFact('이전 종결', payload.priorClosureId ?? '—', true)}${ledgerFact('보존된 수락', payload.acceptanceId, true)}</div>${ledgerBlock('원천 검증값', `<span class="digest">${text(payload.sourceDigest ?? '—')}</span>`)}</details></li>`;
     }
     return `<li class="ledger-entry" data-change-decision-id="${text(event.id)}">${head('실패 후 새 개정', 'Revision after failed effectiveness', event.entity_revision_id ?? event.id, chip('Draft'))}
-        <div class="field-grid">${who}${ledgerFact('이전 개정', payload.priorRevisionId, true)}${ledgerFact('재개 결정', payload.reopenDecisionId, true)}${ledgerFact('불합격 확인', payload.failedCheckId, true)}${ledgerFact('보존된 이전 수락', payload.priorAcceptanceId, true)}${ledgerFact('이전 종결', payload.priorClosureId ?? '없음', Boolean(payload.priorClosureId))}</div>${reason}</li>`;
+        <div class="field-grid">${who}</div>${reason}<details><summary>상세 근거</summary><div class="field-grid">${ledgerFact('이전 개정', payload.priorRevisionId, true)}${ledgerFact('재개 결정', payload.reopenDecisionId, true)}${ledgerFact('불합격 확인', payload.failedCheckId, true)}${ledgerFact('보존된 이전 수락', payload.priorAcceptanceId, true)}${ledgerFact('이전 종결', payload.priorClosureId ?? '없음', Boolean(payload.priorClosureId))}</div></details></li>`;
 }
 
 // Append-only monitoring ledger for one revision: checks plus closure, reopen and new-revision decisions.
@@ -768,8 +951,8 @@ function renderChangeMonitoringLedger(revision, detail) {
         ...checks.map(item => ({ at: item.recorded_at, id: item.id, html: renderChangeCheck(item, events.get(item.id)) })),
         ...decisions.map(item => ({ at: item.recorded_at, id: item.id, html: renderChangeDecision(item) }))
     ].sort((a, b) => a.at < b.at ? -1 : a.at > b.at ? 1 : a.id < b.id ? -1 : 1);
-    return `<h4><span lang="ko">효과성 모니터링 이력</span> · Effectiveness monitoring history</h4>
-        <p>Append-only. Earlier Acceptance, checks, closure and reopen decisions stay visible after a reopen or new revision. All times UTC.</p>
+    return `<h4>효과성 확인 이력</h4>
+        <p class="muted">재개나 새 개정 후에도 이전 수락·확인·결정이 남습니다.</p>
         <ol class="ledger-entries">${entries.map(item => item.html).join('')}</ol>`;
 }
 
@@ -777,17 +960,17 @@ function renderChangeMonitoringLedger(revision, detail) {
 function changeAcceptanceGate(current) {
     const acceptance = current?.acceptances?.at(-1) ?? null;
     const status = acceptance?.status ?? null;
-    if (!acceptance) return { summary: '현재 개정 Acceptance 없음 · No current-revision Acceptance',
-        block: '운영 Acceptance 없음 · The current revision has no Acceptance, so no monitoring decision can rely on an operating approval.' };
+    if (!acceptance) return { summary: '현재 개정의 수락 기록 없음',
+        block: '현재 개정에 수락 기록이 없어 효과성 결정을 기록할 수 없습니다.' };
     if (status?.classificationRequired || status?.type === 'UNKNOWN') return {
-        summary: `${acceptance.id} · 분류 확인 필요 · UNKNOWN (type not recorded, not guessed)`,
-        block: `분류 확인 필요 · ${acceptance.id} is a legacy Acceptance whose type was never recorded. It cannot be used for this operating gate until an Approver records a separate classification; the original record and audit history remain inspectable.` };
+        summary: '분류 확인 필요 · 과거 수락 유형 미기록',
+        block: '과거 수락의 유형이 기록되지 않았습니다. 승인자가 유형을 분류하기 전에는 운영 판단에 쓸 수 없습니다.' };
     if (status?.expired) return {
-        summary: `${acceptance.id} · 조건부 수락 · 만료됨 · ${dateText(status.expiresAt)}`,
-        block: `조건부 수락이 ${dateText(status.expiresAt)}에 만료되었습니다. 새 개정에서 근거, 독립 검토와 승인 결정을 다시 기록해야 합니다.` };
+        summary: `조건부 수락 · 만료됨 · ${timeText(status.expiresAt)}`,
+        block: `조건부 수락이 ${timeText(status.expiresAt)}에 만료되었습니다. 새 개정에서 근거, 독립 검토와 승인 결정을 다시 기록해야 합니다.` };
     if (status?.type === 'Conditional') return {
-        summary: `${acceptance.id} · 조건부 수락 · 유효 · ${status.condition ?? '—'} · 만료 ${dateText(status.expiresAt)}`, block: null };
-    return { summary: `${acceptance.id} · 일반 수락 · Ordinary · ${acceptance.approver_actor_id} · ${dateText(acceptance.accepted_at)}`, block: null };
+        summary: `조건부 수락 · 유효 · ${status.condition ?? '—'} · 만료 ${timeText(status.expiresAt)}`, block: null };
+    return { summary: acceptanceLine(acceptance), block: null };
 }
 
 function changeMonitoringContext(detail) {
@@ -822,60 +1005,44 @@ function changeActor() {
 function changeEvaluateBlock(ctx) {
     const actor = changeActor();
     if (!actor) return noActorReason;
-    if (!effectivenessRoles.includes(actor.role)) {
-        return `역할 불일치 · ${actor.role} (${actor.id}) cannot evaluate Change effectiveness. Only a Quality Engineer or Verification Engineer may do this.`;
-    }
+    if (!effectivenessRoles.includes(actor.role)) return cannotDo(actor, '효과성 평가', '품질 엔지니어 또는 검증 엔지니어');
     return ctx.gate.block;
 }
 
 function changeCloseBlock(ctx) {
     const actor = changeActor();
     if (!actor) return noActorReason;
-    if (!changeClosureRoles.includes(actor.role)) {
-        return `역할 불일치 · ${actor.role} (${actor.id}) cannot close Change monitoring. Only a separate Quality Engineer or Approver may do this.`;
-    }
-    if (actor.id === ctx.change.proposer_actor_id) {
-        return `제안자 ≠ 종결 승인자 · ${actor.id} proposed this Change and cannot approve its closure.`;
-    }
+    if (!changeClosureRoles.includes(actor.role)) return cannotDo(actor, '모니터링 종결', '품질 엔지니어 또는 승인자');
+    if (actor.id === ctx.change.proposer_actor_id) return '요청자는 자신의 변경을 종결할 수 없습니다. 다른 품질 엔지니어 또는 승인자로 전환하세요.';
     if (ctx.gate.block) return ctx.gate.block;
-    if (!ctx.latest) return '효과성 확인 없음 · The current revision has no effectiveness check. Record a source-derived evaluation first.';
-    if (ctx.latestStatus === 'Monitoring') {
-        return `최신 확인 미합격 · Latest check ${ctx.latest.id} is Monitoring (insufficient later data). Closure needs the latest check to Pass; record a later evaluation.`;
-    }
-    if (ctx.latestStatus === 'Reopen Required') {
-        return `최신 확인 실패 · Latest check ${ctx.latest.id} requires Reopen and cannot support closure.`;
-    }
-    if (ctx.latestStatus !== 'Pass') return `감사 상태 없음 · Latest check ${ctx.latest.id} has no matching passing audit status.`;
-    if (actor.id === ctx.latest.recorded_by) {
-        return `평가자 ≠ 종결 승인자 · ${actor.id} evaluated ${ctx.latest.id} and cannot also approve closure.`;
-    }
+    if (!ctx.latest) return '효과성 확인 기록이 없습니다. 후속 LOT 근거로 먼저 평가하세요.';
+    if (ctx.latestStatus === 'Monitoring') return '최근 확인이 데이터 부족입니다. 후속 LOT이 쌓인 시각으로 다시 평가해야 종결할 수 있습니다.';
+    if (ctx.latestStatus === 'Reopen Required') return '최근 확인이 불합격이라 종결할 수 없습니다. 재개를 검토하세요.';
+    if (ctx.latestStatus !== 'Pass') return '최근 확인의 합격 기록을 찾을 수 없습니다.';
+    if (actor.id === ctx.latest.recorded_by) return '효과성을 평가한 사람은 같은 확인으로 종결할 수 없습니다. 다른 품질 엔지니어 또는 승인자로 전환하세요.';
     return null;
 }
 
 function changeReopenBlock(ctx) {
     const actor = changeActor();
     if (!actor) return noActorReason;
-    if (actor.role !== 'Quality Engineer') {
-        return `역할 불일치 · ${actor.role} (${actor.id}) cannot reopen Change monitoring. Only a Quality Engineer may do this.`;
-    }
+    if (actor.role !== 'Quality Engineer') return cannotDo(actor, '변경 재개', '품질 엔지니어');
     if (ctx.gate.block) return ctx.gate.block;
-    if (!ctx.latest) return '효과성 확인 없음 · The current revision has no effectiveness check to reopen from.';
-    if (ctx.latestStatus === 'Monitoring') {
-        return `데이터 부족 · Latest check ${ctx.latest.id} is Monitoring (insufficient later data). An insufficient-data check cannot reopen; only a source-derived Reopen Required result can.`;
-    }
-    if (ctx.latestStatus === 'Pass') return `최신 확인 합격 · Latest check ${ctx.latest.id} passed, so there is no failed source-derived result to reopen from.`;
-    if (ctx.latestStatus !== 'Reopen Required') return `감사 상태 없음 · Latest check ${ctx.latest.id} has no matching Reopen Required audit status.`;
+    if (!ctx.latest) return '재개 근거가 될 효과성 확인 기록이 없습니다.';
+    if (ctx.latestStatus === 'Monitoring') return '데이터 부족 판정으로는 재개할 수 없습니다. 원천 근거에서 불합격이 나와야 재개합니다.';
+    if (ctx.latestStatus === 'Pass') return '최근 확인이 합격이라 재개할 근거가 없습니다.';
+    if (ctx.latestStatus !== 'Reopen Required') return '최근 확인의 재개 필요 기록을 찾을 수 없습니다.';
     if (ctx.change.state === 'Closed' && (!ctx.closure || ctx.latest.recorded_at <= ctx.closure.recorded_at)) {
-        return `종결 이후 실패 확인 필요 · After closure ${ctx.closure?.payload?.decisionId ?? '—'}, reopen needs a failed check recorded later than the closure. Evaluate the later source first.`;
+        return '종결 이후에 기록된 불합격 확인이 있어야 재개할 수 있습니다. 후속 근거를 먼저 평가하세요.';
     }
     return null;
 }
 
-const utcHint = (detail, extra = '') => `<p class="muted">시간대: UTC · 마지막 변경 시각 이후, 현재 서버 시각 이내여야 합니다.${text(extra)}</p>`;
+const utcHint = (detail, extra = '') => `<p class="muted">UTC · 마지막 기록 이후, 현재 시각 이전${text(extra)}</p>`;
 
 function changeCheckOption(ctx, check, eligible) {
-    const status = ctx.events.get(check.id)?.payload?.status ?? 'no audit status';
-    return `<option value="${text(check.id)}" ${eligible ? '' : 'disabled'}>${text(check.id)} · ${text(status)} · LOT ${text(number(check.lot_count))}건 · ${dateText(check.recorded_at)} · ${check === ctx.latest ? '최신' : '이전'}</option>`;
+    const status = ctx.events.get(check.id)?.payload?.status;
+    return `<option value="${text(check.id)}" ${eligible ? '' : 'disabled'}>${check === ctx.latest ? '최근' : '이전'} 확인 · ${text(status ? stateLabel(status) : '판정 기록 없음')} · LOT ${text(number(check.lot_count))}건 · ${dateText(check.recorded_at)}</option>`;
 }
 
 function renderChangeEvaluate(detail, ctx) {
@@ -885,9 +1052,9 @@ function renderChangeEvaluate(detail, ctx) {
     const postClose = ctx.change.state === 'Closed'
         ? ' 종결 후 확인 결과도 이력에 추가되며 기존 종결 결정은 바뀌지 않습니다.' : '';
     return `<div class="effectiveness-action" aria-labelledby="change-evaluate-title"><h4 id="change-evaluate-title">효과성 평가</h4>${card}
-        <form id="change-evaluate-form" class="form-grid capa-form" data-change-monitoring-form="evaluate"><p>평가 시각까지의 후속 LOT을 확인합니다.${text(postClose)}</p>
+        <form id="change-evaluate-form" class="form-grid capa-form" data-change-monitoring-form="evaluate"><p>평가 시각까지 쌓인 후속 LOT으로 판정합니다.${text(postClose)}</p>
         <details><summary>기록 ID</summary><label>확인 ID<input name="id" required maxlength="80" pattern="[A-Z](?:[A-Z0-9]|-){2,79}" autocomplete="off" spellcheck="false" class="mono" value="${text(nextChangeRecordId(detail, 'EFF', usedChangeCheckIds(detail)))}"></label></details>
-        <label>평가 시각 / 구간 끝 (UTC)<input name="at" required maxlength="24" autocomplete="off" spellcheck="false" class="mono" placeholder="2026-08-20T12:00:00.000Z" value="${text(laterUtc(ctx.change.updated_at))}"></label>
+        <label>평가 시각 (UTC)<input name="at" required maxlength="24" autocomplete="off" spellcheck="false" class="mono" placeholder="2026-08-20T12:00:00.000Z" value="${text(laterUtc(ctx.change.updated_at))}"></label>
         ${utcHint(detail)}
         <button type="button" class="button primary" data-change-monitoring-submit="evaluate" ${gateState}>효과성 평가 →</button></form></div>`;
 }
@@ -910,7 +1077,7 @@ function renderChangeClose(detail, ctx) {
 
 function renderChangeReopen(detail, ctx) {
     const { card, gateState } = renderNextStepCard('change-reopen', {
-        label: '변경 재개', role: 'Quality Engineer'
+        label: '변경 재개', role: '품질 엔지니어'
     }, changeReopenBlock(ctx));
     const options = ctx.checks.map(check => changeCheckOption(ctx, check,
         check === ctx.latest && ctx.latestStatus === 'Reopen Required')).join('');
@@ -929,20 +1096,19 @@ function renderChangeReopen(detail, ctx) {
         <label class="span-all">불합격 확인<select name="checkId" required><option value="" selected>선택하세요</option>${options}</select></label>
         ${recurrence}
         <label class="span-all">재개 이유<textarea name="reason" required maxlength="500" placeholder="후속 근거와 재개 이유를 입력하세요"></textarea></label>
-        ${utcHint(detail, ' 재개 후 다음 개정은 원래 요청자가 시작합니다.')}
+        ${utcHint(detail, ' · 다음 개정은 원래 요청자가 시작')}
         <button type="button" class="button primary" data-change-monitoring-submit="reopen" ${gateState}>변경 재개 →</button></form></div>`;
 }
 
 function renderChangeMonitoring(detail) {
     if (!changeMonitoringStates.includes(detail.change.state)) return '';
     const ctx = changeMonitoringContext(detail);
-    const latest = ctx.latestStatus ?? '기록 없음';
+    const latest = ctx.latestStatus ? stateLabel(ctx.latestStatus) : '기록 없음';
     const showReopen = ['Effectiveness Monitoring', 'Closed'].includes(ctx.change.state) && ctx.checks.length > 0;
     return `<section class="detail-section change-monitoring" data-change-monitoring aria-labelledby="change-monitoring-title">
-        <h3 id="change-monitoring-title">효과성 모니터링</h3>
-        <p>후속 LOT·공정 실행·AOI 기록으로 효과를 확인합니다. 표시 시각은 UTC입니다.</p>
-        <div class="field-grid">${row('운영 수락 상태', ctx.gate.summary)}${row('확인 회차', ctx.change.cycle_no ?? '—')}${row('최근 확인 결과', latest)}${row('종결 여부', ctx.closure ? '종결됨' : '진행 중')}</div>
-        <details><summary>기술 정보</summary><div class="field-grid">${row('최근 확인 ID', ctx.latest?.id ?? '없음')}${row('종결 결정 ID', ctx.closure?.payload?.decisionId ?? '없음')}${row('마지막 변경 시각 (UTC)', dateText(ctx.change.updated_at))}${row('서버 현재 시각 (UTC)', dateText(detail.serverNowUtc))}</div></details>
+        <h3 id="change-monitoring-title">효과성 확인</h3>
+        <p>수락 후 후속 LOT·공정 실행·AOI 기록으로 판단이 유지되는지 확인합니다.</p>
+        <div class="field-grid">${row('운영 수락', ctx.gate.summary)}${row('확인 회차', ctx.change.cycle_no ?? '—')}${row('최근 확인 결과', latest)}${row('종결 여부', ctx.closure ? '종결됨' : '진행 중')}</div>
         ${ctx.gate.block ? `<div class="warning-box">${text(ctx.gate.block)}</div>` : ''}
         ${renderChangeEvaluate(detail, ctx)}
         ${ctx.change.state === 'Effectiveness Monitoring' ? renderChangeClose(detail, ctx) : ''}
@@ -954,7 +1120,7 @@ async function runChangeMonitoring(kind, button) {
     const detail = state.detail;
     const form = document.getElementById(`change-${kind}-form`);
     if (!detail || !form || !changeMonitoringStates.includes(detail.change.state)) {
-        throw new Error('Change monitoring is not available in the current Change state');
+        throw new Error('현재 변경 상태에서는 효과성 확인을 기록할 수 없습니다.');
     }
     const ctx = changeMonitoringContext(detail);
     const blocked = kind === 'evaluate' ? changeEvaluateBlock(ctx) :
@@ -964,32 +1130,32 @@ async function runChangeMonitoring(kind, button) {
     const value = name => String(values.get(name) ?? '').trim();
     const input = { changeId: detail.change.id, expectedRevisionNo: detail.change.current_revision_no,
         id: value('id'), actorId: state.actorId, at: value('at') };
-    if (!input.id || !input.at) throw new Error('Enter a record ID and a canonical UTC time');
-    assertStableId(input.id, 'Record ID');
+    if (!input.id || !input.at) throw new Error('기록 ID와 UTC 시각을 입력하세요.');
+    assertStableId(input.id, '기록 ID');
     if (kind === 'evaluate') {
         await submitEffectivenessAction(button, 'evaluateChangeEffectiveness', input, result =>
-            `Effectiveness check ${result.checkId} recorded: ${result.status} · ${number(result.lotCount)} later lots${result.lotIds?.length ? ` (${result.lotIds.join(', ')})` : ''} · state ${result.state}.${result.reasons?.length ? ` Findings: ${result.reasons.join('; ')}` : ''}`);
+            `효과성 평가를 기록했습니다 · ${stateLabel(result.status)} · 후속 LOT ${number(result.lotCount)}건${result.reasons?.length ? ` · ${result.reasons.map(findingLabel).join(', ')}` : ''}`);
         return;
     }
     input.checkId = value('checkId');
     input.reason = value('reason');
-    if (!input.checkId || !input.reason) throw new Error('Choose the latest check and enter a reason');
-    if (input.checkId !== ctx.latest?.id) throw new Error('Choose the latest effectiveness check of the current revision');
+    if (!input.checkId || !input.reason) throw new Error('최근 확인을 선택하고 이유를 입력하세요.');
+    if (input.checkId !== ctx.latest?.id) throw new Error('현재 개정의 최근 효과성 확인을 선택하세요.');
     if (kind === 'close') {
         await submitEffectivenessAction(button, 'closeChangeMonitoring', input, result =>
-            `Change monitoring closed by ${result.decisionId} citing passing check ${result.checkId}. Check records are unchanged.`);
+            '모니터링 종결을 기록했습니다. 확인 기록은 그대로 남습니다.');
         return;
     }
     const recurrence = value('recurrenceAoiDefectId');
     if (form.elements?.recurrenceAoiDefectId && !recurrence) {
-        throw new Error('Enter the target recurrence AOI defect ID linked to the failed check');
+        throw new Error('불합격 확인에 연결된 재발 AOI 결함 ID를 입력하세요.');
     }
     if (recurrence) {
-        assertStableId(recurrence, 'Target recurrence AOI defect ID');
+        assertStableId(recurrence, '재발 AOI 결함 ID');
         input.recurrenceAoiDefectId = recurrence;
     }
     await submitEffectivenessAction(button, 'reopenChangeMonitoring', input, result =>
-        `Change reopened by ${result.decisionId} from failed check ${result.failedCheckId}; cycle ${result.nextCycleNo} begins. Earlier Acceptance, checks and decisions stay in history. The original proposer may start the next revision.`);
+        `변경을 재개했습니다 · ${number(result.nextCycleNo)}회차 시작. 이전 수락과 확인 기록은 그대로 남습니다.`);
 }
 
 function renderChangeDetail() {
@@ -999,17 +1165,22 @@ function renderChangeDetail() {
     const current = detail.revisions.find(item => item.revision.revision_no === change.current_revision_no);
     const next = actionFor(detail);
     const eligible = actorEligible(next, detail);
-    return `<div class="page-heading"><div><p class="eyebrow">변경 관리</p><h1>변경 상세</h1><p>현재 단계, 검증 기준과 승인 이력을 확인합니다.</p></div><div class="heading-actions"><button type="button" class="button" data-view="changes">← 변경 목록</button></div></div>
-        <div class="record-header"><div><h2>${text(change.title)}</h2><p>${text(change.reason)}</p><details><summary>기술 정보</summary><span class="mono muted">${text(change.id)} · 개정 R${number(change.current_revision_no)}</span></details></div><div class="record-meta">${chip(change.state)}<span class="small-chip">${text(change.equipment_id)}</span><span class="small-chip">${text(change.recipe_revision_id)}</span></div></div>
-        <div class="panel-grid top-gap"><div class="stack"><section class="detail-section"><h3>변경 이력 및 근거</h3><p>불합격 기록과 이후 개정을 함께 보존합니다.</p>${detail.revisions.map(item => renderRevision(item, item.revision.revision_no === change.current_revision_no, detail)).join('')}</section></div>
-        <div class="stack"><section class="detail-section"><h3>현재 단계</h3><div class="field-grid">${row('상태', labelFor(labels.states, change.state) ?? change.state)}${row('요청자', detail.change.proposer_actor_id)}${row('대상 레시피', change.recipe_revision_id)}</div><details><summary>기술 정보</summary>${row('현재 계획 ID', current?.plans.at(-1)?.id ?? '없음')}</details><hr class="divider">${renderGateControls(next, eligible, detail)}</section>
+    const recordIds = detail.revisions.map(item => {
+        const risk = item.risk;
+        const plan = item.plans.at(-1);
+        return `<span class="mono muted">R${number(item.revision.revision_no)} · ${text(item.revision.id)}${plan ? ` · ${text(plan.id)}` : ''}${risk ? ` · ${text(risk.matched_rule)} / ${text(risk.rule_version)} / score ${text(risk.score)}` : ''}${item.acceptances.map(acceptance => ` · ${text(acceptance.id)}`).join('')}</span>`;
+    }).join('');
+    return `<div class="page-heading"><div><p class="eyebrow">변경 관리</p><h1>변경 상세</h1></div><div class="heading-actions"><button type="button" class="button" data-view="changes">← 변경 목록</button></div></div>
+        <div class="record-header"><div><h2>${text(change.title)}</h2><p>${text(change.reason)}</p><details class="record-ids"><summary>기록 ID</summary><span class="mono muted">${text(change.id)}</span>${recordIds}</details></div><div class="record-meta">${chip(change.state)}<span class="small-chip">${text(change.equipment_id)}</span><span class="small-chip">${text(change.recipe_revision_id)}</span></div></div>
+        <div class="panel-grid top-gap"><div class="stack"><section class="detail-section"><h3>개정 이력과 근거</h3><p class="muted">불합격한 개정도 지우지 않고 다음 개정과 함께 남깁니다.</p>${detail.revisions.map(item => renderRevision(item, item.revision.revision_no === change.current_revision_no, detail)).join('')}</section></div>
+        <div class="stack"><section class="detail-section"><h3>현재 단계</h3><div class="field-grid">${row('상태', stateLabel(change.state))}${row('요청자', actorLabel(detail.change.proposer_actor_id))}${row('대상 레시피', change.recipe_revision_id)}</div><hr class="divider">${renderGateControls(next, eligible, detail)}</section>
         ${renderChangeMonitoring(detail)}
-        <section class="detail-section"><h3>감사 이력</h3><p>각 결정의 역할과 시각을 확인할 수 있습니다. 내부 ID와 검증값은 감사 상세에 있습니다.</p>${renderAudit(detail.audit)}</section></div></div>`;
+        <section class="detail-section"><h3>감사 이력</h3>${renderAudit(detail.audit)}</section></div></div>`;
 }
 
 function renderModule(name, subtitle, explanation, count = null) {
     return `<div class="page-heading"><div><p class="eyebrow">관리 문서</p><h1>${text(name)}</h1><p>${text(subtitle)}</p></div></div>
-        <div class="card"><div class="card-kicker">연결된 문서</div><h2>${count == null ? 'CAPA와 문서 개정' : `${number(count)}건`}</h2><p>${text(explanation)}</p><button type="button" class="button subtle" data-view="fabtrace">FabTrace에서 확인 →</button></div>`;
+        <div class="card"><h2>${count == null ? 'CAPA와 문서 개정' : `${number(count)}건`}</h2><p>${text(explanation)}</p><button type="button" class="button subtle" data-view="fabtrace">영향 추적에서 보기 →</button></div>`;
 }
 
 function incidentGate(detail) {
@@ -1017,12 +1188,12 @@ function incidentGate(detail) {
     const base = { incidentId: incident.id, expectedRevisionNo: detail.revisions.at(-1)?.revision_no,
         actorId: state.actorId };
     const nextAt = new Date(Date.parse(incident.updated_at) + 120_000).toISOString();
-    if (incident.state === 'Open') return { action: 'containIncident', role: 'Production Manager or Quality Engineer',
+    if (incident.state === 'Open') return { action: 'containIncident', role: '생산 관리자 또는 품질 엔지니어',
         label: 'Record containment', needsReason: true,
         input: { ...base, ownerActorId: state.actorId,
             heldLotIds: ['LOT-A-025', 'LOT-A-026', 'LOT-A-027'], at: '2026-08-27T10:04:00.000Z' } };
     if (incident.state === 'Contained' && !detail.lkg) return {
-        action: 'recordIncidentLkg', role: 'Quality or Verification Engineer',
+        action: 'recordIncidentLkg', role: '품질 엔지니어 또는 검증 엔지니어',
         label: 'Record sampled LKG', input: { ...base,
             aoiInspectionId: 'AOI-A-025', earliestPossibleAt: '2026-08-25T08:00:00.000Z',
             latestPossibleAt: '2026-08-25T12:00:00.000Z',
@@ -1030,16 +1201,16 @@ function incidentGate(detail) {
             limitation: 'Sampled AOI does not prove all intervening units good',
             at: '2026-08-27T10:06:00.000Z' } };
     if (incident.state === 'Contained') return { action: 'proposeIncidentTrace',
-        role: 'Quality, Manufacturing or Equipment Engineer', label: 'Calculate exposure scope',
+        role: '품질·제조·설비 엔지니어', label: 'Calculate exposure scope',
         input: { ...base, at: '2026-08-27T10:08:00.000Z' } };
     if (incident.state === 'Trace Proposed' && detail.scopeReview?.decision === 'Needs Rework') {
         return { action: 'reviseIncidentTrace',
-            role: 'Quality, Manufacturing or Equipment Engineer',
+            role: '품질·제조·설비 엔지니어',
             label: 'Revise trace proposal', needsReason: true,
             input: { ...base, at: nextAt } };
     }
     if (incident.state === 'Trace Proposed') return { action: 'reviewIncidentScope',
-        role: 'Independent Reviewer or Quality Engineer', label: 'Review candidate scope',
+        role: '독립 검토자 또는 품질 엔지니어 (추적 요청자 제외)', label: 'Review candidate scope',
         needsReason: true, input: { ...base, proposalId: detail.proposal?.id,
             at: nextAt } };
     return null;
@@ -1067,16 +1238,9 @@ function incidentBlockReason(next, detail) {
     const actor = state.bootstrap.actors.find(item => item.id === state.actorId);
     if (!actor) return '현재 역할을 선택하세요.';
     if (next.action === 'reviewIncidentScope' && actor.id === detail.proposal?.proposer_actor_id) {
-        return `제안자 ≠ 검토자 · ${actor.id} proposed trace ${detail.proposal.id}, so the same actor cannot review its scope. Select a different Reviewer or Quality Engineer.`;
+        return '영향 범위를 계산한 사람은 같은 범위를 검토할 수 없습니다. 다른 독립 검토자 또는 품질 엔지니어로 전환하세요.';
     }
-    const decision = {
-        containIncident: 'record containment and hold candidate lots',
-        recordIncidentLkg: 'record the sampled last known good observation',
-        proposeIncidentTrace: 'calculate the exposure scope',
-        reviseIncidentTrace: 'revise the trace proposal',
-        reviewIncidentScope: 'review the candidate scope'
-    }[next.action] ?? 'make this decision';
-    return `역할 불일치 · ${actor.role} (${actor.id}) cannot ${decision}. Only ${next.role} may do this.`;
+    return cannotDo(actor, actionLabel(next), next.role.replace(' (추적 요청자 제외)', ''));
 }
 
 function actorHasRole(roles) {
@@ -1088,7 +1252,7 @@ function actorHasRole(roles) {
 const stableIdRule = /^[A-Z](?:[A-Z0-9]|-){2,79}$/;
 function assertStableId(value, label) {
     if (!stableIdRule.test(value)) {
-        throw new Error(`ID 형식 오류 · ${label} must be 3–80 characters: an uppercase letter, then uppercase letters, digits or hyphens.`);
+        throw new Error(`${label} 형식이 맞지 않습니다. 영문 대문자로 시작하고 대문자·숫자·하이픈으로 3–80자를 입력하세요.`);
     }
 }
 
@@ -1104,7 +1268,7 @@ function renderCapaForm(kind, label, fields, eligible, explanation = '') {
         const type = field.type || 'text';
         return `<label>${text(field.label)}<input name="${text(field.name)}" type="${text(type)}" ${field.required === false ? '' : 'required'} maxlength="${field.maxlength ?? 500}" placeholder="${text(field.placeholder ?? '')}"></label>`;
     }).join('');
-    return `<form id="${formId}" class="form-grid capa-form" data-capa-form="${text(kind)}">${explanation ? `<p>${text(explanation)}</p>` : ''}${controls}<button type="button" class="button primary" data-capa-submit="${text(kind)}" ${eligible ? '' : 'disabled'}>${text(label)} →</button>${eligible ? '' : '<p class="warning-box">이 작업을 수행할 수 있는 역할을 선택하세요.</p>'}</form>`;
+    return `<form id="${formId}" class="form-grid capa-form" data-capa-form="${text(kind)}">${explanation ? `<p>${text(explanation)}</p>` : ''}${controls}<button type="button" class="button primary" data-capa-submit="${text(kind)}" ${eligible ? '' : 'disabled'}>${text(label)} →</button>${eligible ? '' : '<p class="muted">이 작업을 할 수 있는 역할로 전환하세요.</p>'}</form>`;
 }
 
 function renderCapaWorkflow(detail) {
@@ -1115,7 +1279,7 @@ function renderCapaWorkflow(detail) {
     const actions = detail.capaActions;
     const feedback = detail.documentFeedback;
     const latest = detail.revisions.at(-1)?.revision_no;
-    const cycleFields = item => `<div class="field-grid">${row('사이클 번호', item.cycle_no)}${row('시작자 · 시각', `${item.opened_by} · ${dateText(item.opened_at)}`)}</div><details><summary>기술 정보</summary><div class="field-grid">${row('사이클 ID', item.id)}${row('이전 사이클', item.parent_cycle_id ?? '첫 사이클')}</div></details>`;
+    const cycleFields = item => `<div class="field-grid">${row('사이클 번호', item.cycle_no)}${row('시작자 · 시각 (UTC)', `${actorLabel(item.opened_by)} · ${timeText(item.opened_at)}`)}${row('이전 사이클', item.parent_cycle_id ? '재개된 사이클' : '첫 사이클')}</div>`;
     const reopenDecision = awaitingReopenedCycle && priorCycle
         ? detail.cycleDecisions.find(item => item.cycle_id === priorCycle.id && item.decision === 'Reopened') : null;
     const cycleHeader = cycle ? cycleFields(cycle) : awaitingReopenedCycle && priorCycle
@@ -1125,7 +1289,7 @@ function renderCapaWorkflow(detail) {
         ? renderCapaForm('start', 'CAPA 사이클 시작', [
             { name: 'reason', label: 'CAPA 시작 이유', placeholder: '수락된 영향 범위에 CAPA가 필요한 이유' }
         ], actorHasRole(['Quality Engineer', 'Production Manager'])) : '';
-    const causeList = causes.length ? `<div class="table-wrap"><table><thead><tr><th>원인</th><th>판정</th><th>연결된 근거</th><th>판정자 · 시각</th></tr></thead><tbody>${causes.map(item => `<tr><td class="mono">${text(item.id)}</td><td>${chip(item.status)}<br>${text(item.statement)}</td><td>${text(item.evidence_kind)} · <span class="mono">${text(item.evidence_id)}</span></td><td>${text(item.assessed_by)}<br><span class="muted">${dateText(item.assessed_at)}</span></td></tr>`).join('')}</tbody></table></div>` : empty('원인 기록 없음', '원천 근거와 연결된 가설 또는 확인된 원인을 기록하세요.');
+    const causeList = causes.length ? `<div class="table-wrap"><table><thead><tr><th>원인</th><th>판정</th><th>연결된 근거</th><th>판정자 · 시각</th></tr></thead><tbody>${causes.map(item => `<tr><td class="mono">${text(item.id)}</td><td>${chip(item.status)}<br>${text(item.statement)}</td><td>${text(evidenceKindNames[item.evidence_kind] ?? item.evidence_kind)} · <span class="mono">${text(item.evidence_id)}</span></td><td>${text(actorLabel(item.assessed_by))}<br><span class="muted">${dateText(item.assessed_at)}</span></td></tr>`).join('')}</tbody></table></div>` : empty('원인 기록 없음', '원천 근거와 연결된 가설 또는 확인된 원인을 기록하세요.');
     const confirmed = causes.filter(item => item.status === 'Confirmed');
     const causeForm = cycle ? renderCapaForm('cause', '근본 원인 기록', [
         { name: 'id', label: '원인 ID', placeholder: 'CAUSE-001' },
@@ -1137,7 +1301,7 @@ function renderCapaWorkflow(detail) {
             { value: 'measurement', label: '측정' }] },
         { name: 'evidenceId', label: '원천 근거 ID', placeholder: 'EV-001' }
     ], actorHasRole(['Quality Engineer', 'Manufacturing Engineer', 'Equipment / Automation Engineer'])) : '';
-    const actionList = actions.length ? `<div class="table-wrap"><table><thead><tr><th>CAPA 조치</th><th>담당자 · 기한</th><th>근본 원인</th><th>독립 검토</th></tr></thead><tbody>${actions.map(item => `<tr><td><span class="mono">${text(item.id)}</span><br>${chip(item.action_type)}<br>${text(item.action_text)}</td><td>${text(item.owner_actor_id)}<br><span class="muted">기한 ${dateText(item.due_at)}</span></td><td class="mono">${text(item.cause_id)}</td><td>${item.review ? `${chip(item.review.decision)} · ${text(item.review.reviewer_actor_id)}<br>${text(item.review.reason)}<br><span class="muted">${text(item.review.evidence_kind)} · ${text(item.review.evidence_id)}</span>` : '<span class="status-chip warn">검토 대기</span>'}</td></tr>`).join('')}</tbody></table></div>` : empty('시정·예방 조치 없음', '확인된 원인에 조치를 연결하고 담당자를 지정하세요.');
+    const actionList = actions.length ? `<div class="table-wrap"><table><thead><tr><th>CAPA 조치</th><th>담당자 · 기한</th><th>근본 원인</th><th>독립 검토</th></tr></thead><tbody>${actions.map(item => `<tr><td><span class="mono">${text(item.id)}</span><br>${chip(item.action_type)}<br>${text(item.action_text)}</td><td>${text(actorLabel(item.owner_actor_id))}<br><span class="muted">기한 ${dateText(item.due_at)}</span></td><td class="mono">${text(item.cause_id)}</td><td>${item.review ? `${chip(item.review.decision)} · ${text(actorLabel(item.review.reviewer_actor_id))}<br>${text(item.review.reason)}<br><span class="muted">${text(evidenceKindNames[item.review.evidence_kind] ?? item.review.evidence_kind)} · ${text(item.review.evidence_id)}</span>` : '<span class="status-chip warn">검토 대기</span>'}</td></tr>`).join('')}</tbody></table></div>` : empty('시정·예방 조치 없음', '확인된 원인에 조치를 연결하고 담당자를 지정하세요.');
     const causeOptions = confirmed.map(item => ({ value: item.id, label: `${item.id} · ${item.statement}` }));
     const ownerOptions = state.bootstrap.actors.filter(item => ['Quality Engineer', 'Manufacturing Engineer', 'Equipment / Automation Engineer', 'Production Manager', 'Verification Engineer'].includes(item.role)).map(item => ({ value: item.id, label: `${roleLabel(item.role)} · ${actorDisplayName(item)}` }));
     const actionForm = cycle && causeOptions.length ? renderCapaForm('action', 'CAPA 조치 기록', [
@@ -1151,7 +1315,7 @@ function renderCapaWorkflow(detail) {
     ], actorHasRole(['Quality Engineer', 'Manufacturing Engineer', 'Equipment / Automation Engineer'])) : '';
     const reviewable = actions.filter(item => !item.review);
     const reviewForm = cycle && reviewable.length ? renderCapaForm('action-review', '독립 조치 검토 기록', [
-        { name: 'actionId', label: '검토할 조치', type: 'select', options: reviewable.map(item => ({ value: item.id, label: `${item.id} · ${item.action_type}` })) },
+        { name: 'actionId', label: '검토할 조치', type: 'select', options: reviewable.map(item => ({ value: item.id, label: `${item.id} · ${stateLabel(item.action_type)}` })) },
         { name: 'decision', label: '검토 결정', type: 'select', options: [
             { value: 'Pass', label: '합격' }, { value: 'Needs Rework', label: '재작업 필요' }] },
         { name: 'evidenceKind', label: '검증 근거 유형', type: 'select', options: [
@@ -1170,12 +1334,12 @@ function renderCapaWorkflow(detail) {
         const doc = detail.controlledDocuments.find(candidate => candidate.id === item.document_id);
         const revisions = doc?.revisions ?? [];
         const sourceRevision = revisions.find(revision => revision.source_feedback_id === item.id);
-        return `<tr><td><span class="mono">${text(item.id)}</span><br>${text(sampleDisplay(doc?.title ?? item.document_id))}<br>${text(item.proposed_summary)}</td><td class="mono">${text(item.capa_action_id)}<br>${text(item.incident_id)} / ${text(item.cycle_id)}</td><td>${item.review ? `${chip(item.review.decision)} · ${text(item.review.reviewer_actor_id)}<br>${text(item.review.reason)}` : '<span class="status-chip warn">검토 대기</span>'}</td><td>${text(item.base_revision_id)} → ${text(sourceRevision?.id ?? '승인 대기')}<br>${sourceRevision ? `승인자 ${text(sourceRevision.approved_by)}` : ''}</td></tr>`;
+        return `<tr><td><span class="mono">${text(item.id)}</span><br>${text(sampleDisplay(doc?.title ?? item.document_id))}<br>${text(item.proposed_summary)}</td><td class="mono">${text(item.capa_action_id)}<br>${text(item.incident_id)} / ${text(item.cycle_id)}</td><td>${item.review ? `${chip(item.review.decision)} · ${text(actorLabel(item.review.reviewer_actor_id))}<br>${text(item.review.reason)}` : '<span class="status-chip warn">검토 대기</span>'}</td><td>${text(item.base_revision_id)} → ${text(sourceRevision?.id ?? '승인 대기')}<br>${sourceRevision ? `${text(actorLabel(sourceRevision.approved_by))} 승인` : ''}</td></tr>`;
     }).join('')}</tbody></table></div>` : empty('관리 문서 피드백 없음', '독립 검토를 통과한 CAPA 조치에서 문서 개정을 제안할 수 있습니다.');
     const feedbackForm = cycle && passedActions.length && currentDocs.length ? renderCapaForm('feedback', '문서 피드백 제안', [
         { name: 'id', label: '피드백 ID', placeholder: 'FB-001' },
         { name: 'documentRevision', label: '관리 문서 · 현재 개정', type: 'select', options: currentDocs },
-        { name: 'capaActionId', label: '검토된 조치', type: 'select', options: passedActions.map(item => ({ value: item.id, label: `${item.id} · ${item.action_type}` })) },
+        { name: 'capaActionId', label: '검토된 조치', type: 'select', options: passedActions.map(item => ({ value: item.id, label: `${item.id} · ${stateLabel(item.action_type)}` })) },
         { name: 'proposedSummary', label: '제안 변경 요약', placeholder: '관리 문서 변경 내용을 적으세요' }
     ], actorHasRole(['Quality Engineer', 'Manufacturing Engineer', 'Equipment / Automation Engineer'])) : '';
     const pendingFeedback = feedback.filter(item => !item.review);
@@ -1192,12 +1356,12 @@ function renderCapaWorkflow(detail) {
         { name: 'feedbackId', label: '검토된 피드백', type: 'select', options: approvableFeedback.map(item => ({ value: item.id, label: `${item.id} · ${item.document_id}` })) },
         { name: 'reason', label: '승인 이유', placeholder: '검토된 문서 변경을 확인하세요' }
     ], actorHasRole(['Approver', 'Quality Engineer'])) : '';
-    const documentRevisions = detail.controlledDocuments.map(doc => `<div class="revision-card"><div class="revision-head"><strong>${text(doc.doc_type)} · ${text(doc.code)}</strong><span class="small-chip">${text(doc.scope_equipment_id)} / ${text(doc.defect_code_id)}</span></div><div class="revision-body">${doc.revisions.map(revision => `<div class="field-grid document-lineage">${row('개정', `R${revision.revision_no}`)}${row('개정 요약', sampleDisplay(revision.summary))}${row('승인자 · 시각', `${revision.approved_by} · ${dateText(revision.approved_at)}`)}</div><details><summary>개정 기술 정보</summary><div class="field-grid">${row('개정 ID', revision.id)}${row('이전 개정', revision.parent_revision_id ?? '기준 개정')}${row('원천 피드백', revision.source_feedback_id ?? '기준 데이터')}${row('원천 사건', revision.source_incident_id ?? '기준 데이터')}${row('원천 사이클', revision.source_cycle_id ?? '기준 데이터')}</div></details>`).join('')}</div></div>`).join('');
+    const documentRevisions = detail.controlledDocuments.map(doc => `<div class="revision-card"><div class="revision-head"><strong>${text(doc.doc_type)} · ${text(doc.code)}</strong><span class="small-chip">${text(doc.scope_equipment_id)} / ${text(doc.defect_code_id)}</span></div><div class="revision-body">${doc.revisions.map(revision => `<div class="field-grid document-lineage">${row('개정', `R${revision.revision_no}`)}${row('개정 요약', sampleDisplay(revision.summary))}${row('승인 · 시각 (UTC)', `${actorLabel(revision.approved_by)} · ${timeText(revision.approved_at)}`)}</div><details><summary>기록 ID</summary><div class="field-grid">${row('개정 ID', revision.id)}${row('이전 개정', revision.parent_revision_id ?? '기준 개정')}${row('원천 피드백', revision.source_feedback_id ?? '기준 데이터')}${row('원천 사건', revision.source_incident_id ?? '기준 데이터')}${row('원천 사이클', revision.source_cycle_id ?? '기준 데이터')}</div></details>`).join('')}</div></div>`).join('');
     const audit = detail.audit.filter(item => ['capa-started', 'cause-assessed', 'capa-action-recorded', 'capa-action-reviewed', 'document-feedback-proposed', 'document-feedback-reviewed', 'document-revision-approved'].includes(item.action));
     const reviewedActions = actions.filter(item => item.review);
-    const actionReviewList = reviewedActions.length ? `<div class="table-wrap"><table><thead><tr><th>검토된 조치</th><th>결정</th><th>후속 원천 근거</th><th>검토자 · 이유</th></tr></thead><tbody>${reviewedActions.map(item => `<tr><td class="mono">${text(item.id)}</td><td>${chip(item.review.decision)}</td><td>${text(item.review.evidence_kind)} · <span class="mono">${text(item.review.evidence_id)}</span></td><td>${text(item.review.reviewer_actor_id)}<br>${text(item.review.reason)}</td></tr>`).join('')}</tbody></table></div>` : empty('독립 조치 검토 없음', '별도 검토자가 후속 원천 근거로 조치를 확인합니다.');
+    const actionReviewList = reviewedActions.length ? `<div class="table-wrap"><table><thead><tr><th>검토된 조치</th><th>결정</th><th>후속 원천 근거</th><th>검토자 · 이유</th></tr></thead><tbody>${reviewedActions.map(item => `<tr><td class="mono">${text(item.id)}</td><td>${chip(item.review.decision)}</td><td>${text(evidenceKindNames[item.review.evidence_kind] ?? item.review.evidence_kind)} · <span class="mono">${text(item.review.evidence_id)}</span></td><td>${text(actorLabel(item.review.reviewer_actor_id))}<br>${text(item.review.reason)}</td></tr>`).join('')}</tbody></table></div>` : empty('독립 조치 검토 없음', '별도 검토자가 후속 원천 근거로 조치를 확인합니다.');
     const reviewedFeedback = feedback.filter(item => item.review);
-    const feedbackReviewList = reviewedFeedback.length ? `<div class="table-wrap"><table><thead><tr><th>검토된 피드백</th><th>결정</th><th>검토자 · 이유</th></tr></thead><tbody>${reviewedFeedback.map(item => `<tr><td class="mono">${text(item.id)}</td><td>${chip(item.review.decision)}</td><td>${text(item.review.reviewer_actor_id)}<br>${text(item.review.reason)}</td></tr>`).join('')}</tbody></table></div>` : empty('문서 피드백 검토 없음', '제안자와 다른 검토자가 CAPA 근거로 피드백을 확인합니다.');
+    const feedbackReviewList = reviewedFeedback.length ? `<div class="table-wrap"><table><thead><tr><th>검토된 피드백</th><th>결정</th><th>검토자 · 이유</th></tr></thead><tbody>${reviewedFeedback.map(item => `<tr><td class="mono">${text(item.id)}</td><td>${chip(item.review.decision)}</td><td>${text(actorLabel(item.review.reviewer_actor_id))}<br>${text(item.review.reason)}</td></tr>`).join('')}</tbody></table></div>` : empty('문서 피드백 검토 없음', '제안자와 다른 검토자가 CAPA 근거로 피드백을 확인합니다.');
     const feedbackIds = new Set(feedback.map(item => item.id));
     const approvedCount = detail.controlledDocuments.reduce((total, doc) =>
         total + doc.revisions.filter(revision => feedbackIds.has(revision.source_feedback_id)).length, 0);
@@ -1221,7 +1385,7 @@ function renderCapaWorkflow(detail) {
         const statusText = { current: '현재', done: '완료', pending: '대기' }[status];
         return `<details class="capa-stage ${status}" data-capa-stage="${item.key}"${status === 'current' ? ' open aria-current="step"' : ''}><summary><span class="stage-no">0${index + 1}</span><span class="stage-title">${text(item.ko)}</span><span class="stage-count">${number(item.count)}건</span><span class="stage-status">${statusText}</span></summary><div class="capa-stage-body">${item.body}</div></details>`;
     }).join('');
-    return `<section class="detail-section capa-workflow" aria-label="CAPA 및 관리 문서 흐름"><h3>CAPA 단계</h3><p>현재 단계가 펼쳐져 있습니다. 완료·대기 단계와 과거 결정도 확인할 수 있습니다.</p><div class="capa-stages">${stageList}</div><h3 class="top-gap">CAPA 감사 이력</h3>${audit.length ? renderAudit(audit) : empty('CAPA 감사 결정 없음', 'CAPA와 문서 결정은 사건 감사 이력에 기록됩니다.')}</section>`;
+    return `<section class="detail-section capa-workflow" aria-label="CAPA 및 관리 문서 흐름"><h3>CAPA 단계</h3><div class="capa-stages">${stageList}</div><h3 class="top-gap">CAPA 감사 이력</h3>${audit.length ? renderAudit(audit) : empty('CAPA 감사 결정 없음', 'CAPA와 문서 결정은 사건 감사 이력에 기록됩니다.')}</section>`;
 }
 
 // Picks the single open CAPA stage from persisted records. Presentation only; the server decides what is allowed.
@@ -1250,19 +1414,19 @@ function renderEffectivenessCheck(check, payload) {
     const lots = Array.isArray(check.source?.lotIds) ? check.source.lotIds : [];
     const gaps = Array.isArray(payload?.gaps) ? payload.gaps : null;
     const missing = gaps == null ? '<p class="muted">연결된 감사 상세가 없습니다.</p>' :
-        gaps.length ? `<ul class="gap-list">${gaps.map(gap => `<li>${text(gap)}</li>`).join('')}</ul>` :
-            '<p>누락 요건 없음</p>';
+        gaps.length ? `<ul class="gap-list">${gaps.map(gap => `<li>${text(findingLabel(gap))}</li>`).join('')}</ul>` :
+            '<p>모든 요건 충족</p>';
     return `<li class="ledger-entry" data-check-id="${text(check.id)}"><div class="ledger-entry-head"><span class="ledger-kind">효과성 확인</span>${result}</div>
-        <div class="field-grid">${ledgerFact('확인 시각 (UTC)', dateText(check.evaluated_at))}${ledgerFact('후속 LOT', `${number(check.lot_count)}건${payload?.requiredLots ? ` · 필요 ${number(payload.requiredLots)}건` : ''}`)}${ledgerFact('AOI 검사 / 불량', `${number(check.inspected_units)} / ${number(check.rejected_units)}`)}${ledgerFact('재발 / 미해결 경보', `${number(check.recurrence_count)} / ${number(check.unresolved_alarm_count)}`)}</div>
-        ${ledgerBlock('판정 사유', missing)}<details><summary>상세 근거</summary><div class="field-grid">${ledgerFact('확인 ID', check.id, true)}${ledgerFact('확인자', check.evaluated_by)}${ledgerFact('출처 구간 (UTC)', `${dateText(check.window_start)} → ${dateText(check.window_end)}`)}${ledgerFact('규칙 버전', check.rule_version, true)}</div>
+        <div class="field-grid">${ledgerFact('확인 시각 (UTC)', timeText(check.evaluated_at))}${ledgerFact('후속 LOT', `${number(check.lot_count)}건${payload?.requiredLots ? ` · 필요 ${number(payload.requiredLots)}건` : ''}`)}${ledgerFact('AOI 검사 / 불량', `${number(check.inspected_units)} / ${number(check.rejected_units)}`)}${ledgerFact('재발 / 미해결 경보', `${number(check.recurrence_count)} / ${number(check.unresolved_alarm_count)}`)}</div>
+        ${ledgerBlock('판정 사유', missing)}<details><summary>상세 근거</summary><div class="field-grid">${ledgerFact('확인 ID', check.id, true)}${ledgerFact('확인자', actorLabel(check.evaluated_by))}${ledgerFact('출처 구간 (UTC)', `${dateText(check.window_start)} → ${dateText(check.window_end)}`)}${ledgerFact('규칙 버전', check.rule_version, true)}</div>
         ${ledgerBlock(`출처 LOT (${number(lots.length)})`, lots.length ? `<ul class="lot-list">${lots.map(lot => `<li class="small-chip mono">${text(lot)}</li>`).join('')}</ul>` : '<p class="muted">해당 구간의 LOT 없음</p>')}${ledgerBlock('출처 검증값', `<span class="digest">${text(check.source_digest)}</span>`)}</details></li>`;
 }
 
 function renderCycleDecision(decision, check, payload) {
     const kind = decision.decision === 'Closed' ? '종결 결정' : decision.decision === 'Reopened' ? '재개 결정' : '사이클 결정';
     return `<li class="ledger-entry" data-decision-id="${text(decision.id)}"><div class="ledger-entry-head"><span class="ledger-kind">${kind}</span>${chip(decision.decision)}</div>
-        <div class="field-grid">${ledgerFact('결정 시각 (UTC)', dateText(decision.decided_at))}${ledgerFact('판단 이유', decision.reason)}</div>
-        <details><summary>결정 상세</summary><div class="field-grid">${ledgerFact('결정 ID', decision.id, true)}${ledgerFact('결정자', decision.actor_id)}${ledgerFact('연결된 확인', decision.effectiveness_check_id, true)}${ledgerFact('재발 근거 (AOI)', decision.recurrence_aoi_defect_id ?? '해당 없음', Boolean(decision.recurrence_aoi_defect_id))}${payload?.priorClosureId ? ledgerFact('이전 종결', payload.priorClosureId, true) : ''}${payload?.nextCycleNo ? ledgerFact('다음 사이클', payload.nextCycleNo) : ''}</div>${check ? ledgerBlock('연결된 출처 검증값', `<span class="digest">${text(check.source_digest)}</span>`) : ''}</details></li>`;
+        <div class="field-grid">${ledgerFact('결정자 · 시각 (UTC)', `${actorLabel(decision.actor_id)} · ${timeText(decision.decided_at)}`)}${ledgerFact('판단 이유', decision.reason)}</div>
+        <details><summary>상세 근거</summary><div class="field-grid">${ledgerFact('결정 ID', decision.id, true)}${ledgerFact('연결된 확인', decision.effectiveness_check_id, true)}${ledgerFact('재발 근거 (AOI)', decision.recurrence_aoi_defect_id ?? '해당 없음', Boolean(decision.recurrence_aoi_defect_id))}${payload?.priorClosureId ? ledgerFact('이전 종결', payload.priorClosureId, true) : ''}${payload?.nextCycleNo ? ledgerFact('다음 사이클', payload.nextCycleNo) : ''}</div>${check ? ledgerBlock('연결된 출처 검증값', `<span class="digest">${text(check.source_digest)}</span>`) : ''}</details></li>`;
 }
 
 // Read-only Phase 5 ledger built from persisted checks, decisions and audit payloads. No action is sent from here.
@@ -1287,16 +1451,14 @@ function renderEffectivenessHistory(detail) {
         const parent = cycle.parent_cycle_id;
         const reopenedBy = parent ? decisions.find(item => item.cycle_id === parent && item.decision === 'Reopened') : null;
         const closure = decisions.find(item => item.cycle_id === cycle.id && item.decision === 'Closed');
-        const lineage = parent
-            ? `이전 사이클에서 재개됨${reopenedBy ? ` · 결정 ${text(reopenedBy.id)}` : ''}`
-            : '첫 사이클';
+        const lineage = parent ? '이전 사이클에서 재개됨' : '첫 사이클';
         return `<article class="cycle-panel" id="effectiveness-${text(cycle.id)}" data-cycle-id="${text(cycle.id)}"><header class="cycle-panel-head"><div><span class="ledger-kind">사이클 ${number(cycle.cycle_no)}</span></div>${closure ? '<span class="small-chip">종결됨</span>' : ''}</header>
-            <p class="cycle-lineage">${lineage} · ${dateText(cycle.opened_at)}</p><details><summary>사이클 기술 정보</summary><span class="mono">${text(cycle.id)} · ${text(cycle.opened_by)}${closure ? ` · ${text(closure.id)}` : ''}</span>${parent ? ` · <a class="text-link mono" href="#effectiveness-${text(parent)}">${text(parent)}</a>` : ''}</details>
+            <p class="cycle-lineage">${lineage} · ${dateText(cycle.opened_at)} UTC</p><details><summary>기록 ID</summary><span class="mono">${text(cycle.id)}${closure ? ` · ${text(closure.id)}` : ''}${reopenedBy ? ` · ${text(reopenedBy.id)}` : ''}</span>${parent ? ` · <a class="text-link mono" href="#effectiveness-${text(parent)}">${text(parent)}</a>` : ''}</details>
             ${entries.length ? `<ol class="ledger-entries">${entries.map(item => item.html).join('')}</ol>` : empty('효과성 확인 기록 없음', '확인과 종결·재개 결정이 저장되면 여기에 표시됩니다.')}</article>`;
     }).join('');
     return `<section class="detail-section effectiveness-history top-gap" data-effectiveness-history aria-labelledby="effectiveness-history-title">
-        <h3 id="effectiveness-history-title">효과성 및 사이클 이력</h3>
-        <p>재개 후에도 이전 확인과 종결 결정은 보존됩니다. 원천 ID와 검증값은 상세 근거에서 확인할 수 있습니다.</p>
+        <h3 id="effectiveness-history-title">효과성 확인과 사이클 이력</h3>
+        <p class="muted">재개 후에도 이전 확인과 종결 결정이 남습니다.</p>
         ${renderEffectivenessClose(detail)}${renderEffectivenessEvaluate(detail)}${renderEffectivenessReopen(detail)}
         <div class="cycle-stack">${panels}</div></section>`;
 }
@@ -1327,23 +1489,23 @@ function renderEffectivenessEvaluate(detail) {
     if (!cycle || !monitoringStates.includes(detail.incident.state)) return '';
     const actor = state.bootstrap.actors.find(item => item.id === state.actorId);
     const blockReason = !actor ? '현재 역할을 선택하세요.' :
-        effectivenessRoles.includes(actor.role) ? null : '품질 또는 검증 담당 역할만 효과성을 평가할 수 있습니다.';
+        effectivenessRoles.includes(actor.role) ? null : cannotDo(actor, '효과성 평가', '품질 엔지니어 또는 검증 엔지니어');
     const { card, gateState } = renderNextStepCard('effectiveness', {
-        label: '효과성 평가', role: '품질 또는 검증 엔지니어'
+        label: '효과성 평가', role: '품질 엔지니어 또는 검증 엔지니어'
     }, blockReason);
     const postClose = detail.incident.state === 'Closed'
         ? '종결 후 확인 결과도 이전 종결 이력을 변경하지 않습니다.' : '';
     return `<div class="effectiveness-action" aria-labelledby="effectiveness-evaluate-title"><h4 id="effectiveness-evaluate-title">효과성 평가</h4>${card}
-        <form id="effectiveness-evaluate-form" class="form-grid capa-form" data-effectiveness-form="evaluate"><p>평가 시각까지 연결된 LOT과 AOI 근거로 판정합니다. ${text(postClose)}</p>
-        <label>확인 ID<input name="id" required maxlength="80" pattern="[A-Z](?:[A-Z0-9]|-){2,79}" autocomplete="off" spellcheck="false" class="mono" value="${text(nextEffectivenessCheckId(detail, cycle))}"></label>
+        <form id="effectiveness-evaluate-form" class="form-grid capa-form" data-effectiveness-form="evaluate"><p>평가 시각까지 쌓인 후속 LOT과 AOI 근거로 판정합니다. ${text(postClose)}</p>
+        <details><summary>기록 ID</summary><label>확인 ID<input name="id" required maxlength="80" pattern="[A-Z](?:[A-Z0-9]|-){2,79}" autocomplete="off" spellcheck="false" class="mono" value="${text(nextEffectivenessCheckId(detail, cycle))}"></label></details>
         <label>평가 시각 (UTC)<input name="at" required maxlength="24" autocomplete="off" spellcheck="false" class="mono" placeholder="2026-10-06T10:00:00.000Z" value="${text(laterUtc(detail.incident.updated_at))}"></label>
         <button type="button" class="button primary" data-effectiveness-submit="evaluate" ${gateState}>근거 평가 →</button></form></div>`;
 }
 
 function effectivenessMessage(result) {
     const summary = `후속 LOT ${number(result.lotCount)}건 · AOI 검사 ${number(result.inspectedUnits)}건 · 불합격 ${number(result.rejectedUnits)}건 · 대상 결함 재발 ${number(result.recurrenceCount)}건`;
-    if (result.passed) return `효과성 확인이 합격으로 기록되었습니다. ${summary}`;
-    return `효과성 확인이 불합격으로 기록되었습니다. ${summary}. 판정 근거는 이력을 확인하세요.`;
+    if (result.passed) return `효과성 평가를 기록했습니다 · 합격 · ${summary}`;
+    return `효과성 평가를 기록했습니다 · ${Number(result.recurrenceCount) > 0 ? '불합격' : '데이터 부족'} · ${summary}`;
 }
 
 async function runEffectivenessEvaluation(button) {
@@ -1352,14 +1514,14 @@ async function runEffectivenessEvaluation(button) {
     const form = document.getElementById('effectiveness-evaluate-form');
     const cycle = detail ? activeIncidentCycle(detail) : null;
     if (!detail || !form || !cycle || !monitoringStates.includes(detail.incident.state)) {
-        throw new Error('Effectiveness evaluation is not available in the current incident state');
+        throw new Error('현재 사건 상태에서는 효과성을 평가할 수 없습니다.');
     }
-    if (!actorHasRole(effectivenessRoles)) throw new Error('Select a Quality Engineer or Verification Engineer');
+    if (!actorHasRole(effectivenessRoles)) throw new Error('품질 엔지니어 또는 검증 엔지니어로 전환하세요.');
     const values = new FormData(form);
     const id = String(values.get('id') ?? '').trim();
     const at = String(values.get('at') ?? '').trim();
-    if (!id || !at) throw new Error('Enter a check ID and a canonical UTC evaluation time');
-    assertStableId(id, 'Check ID');
+    if (!id || !at) throw new Error('확인 ID와 UTC 평가 시각을 입력하세요.');
+    assertStableId(id, '확인 ID');
     await submitEffectivenessAction(button, 'evaluateIncidentEffectiveness', {
         incidentId: detail.incident.id, expectedRevisionNo: detail.revisions.at(-1)?.revision_no,
         cycleId: cycle.id, id, actorId: state.actorId, at }, effectivenessMessage);
@@ -1393,7 +1555,7 @@ function closeBlockReason(detail, checks) {
     const actor = state.bootstrap.actors.find(item => item.id === state.actorId);
     if (!actor) return '현재 역할을 선택하세요.';
     if (!closureRoles.includes(actor.role)) {
-        return '별도 승인자 또는 품질 엔지니어만 사이클을 종결할 수 있습니다.';
+        return cannotDo(actor, '사이클 종결', '승인자 또는 품질 엔지니어');
     }
     if (actor.id === detail.incident.proposer_actor_id) {
         return '사건 요청자는 자신의 사이클 종결을 승인할 수 없습니다.';
@@ -1415,10 +1577,10 @@ function renderEffectivenessClose(detail) {
     const { card, gateState } = renderNextStepCard('close', {
         label: '사이클 종결', role: '별도 승인자 또는 품질 엔지니어'
     }, blockReason);
-    const checkOptions = checks.map(item => `<option value="${text(item.id)}">${text(item.id)} · LOT ${text(number(item.lot_count))}건 · ${dateText(item.evaluated_at)}</option>`).join('');
+    const checkOptions = checks.map(item => `<option value="${text(item.id)}">합격 확인 · LOT ${text(number(item.lot_count))}건 · ${dateText(item.evaluated_at)}</option>`).join('');
     return `<div class="effectiveness-action" aria-labelledby="effectiveness-close-title"><h4 id="effectiveness-close-title">사이클 종결</h4>${card}
         <form id="effectiveness-close-form" class="form-grid capa-form" data-effectiveness-form="close"><p>합격한 효과성 확인을 선택해 종결 이유를 기록합니다.</p>
-        <label>종결 결정 ID<input name="id" required maxlength="80" pattern="[A-Z](?:[A-Z0-9]|-){2,79}" autocomplete="off" spellcheck="false" class="mono" value="${text(nextCycleDecisionId(detail, cycle, 'CLOSE'))}"></label>
+        <details><summary>기록 ID</summary><label>종결 결정 ID<input name="id" required maxlength="80" pattern="[A-Z](?:[A-Z0-9]|-){2,79}" autocomplete="off" spellcheck="false" class="mono" value="${text(nextCycleDecisionId(detail, cycle, 'CLOSE'))}"></label></details>
         <label>종결 시각 (UTC)<input name="at" required maxlength="24" autocomplete="off" spellcheck="false" class="mono" placeholder="2026-09-21T11:00:00.000Z" value="${text(laterUtc(detail.incident.updated_at))}"></label>
         <label class="span-all">합격한 효과성 확인<select name="checkId" required><option value="" selected>선택하세요</option>${checkOptions}</select></label>
         <label class="span-all">종결 이유<textarea name="reason" required maxlength="500" placeholder="합격 근거와 종결 판단을 적으세요"></textarea></label>
@@ -1431,7 +1593,7 @@ async function runEffectivenessClose(button) {
     const form = document.getElementById('effectiveness-close-form');
     const cycle = detail ? activeIncidentCycle(detail) : null;
     if (!form || !cycle || detail.incident.state !== 'Effectiveness Check') {
-        throw new Error('Closure is available only in Effectiveness Check with a current cycle');
+        throw new Error('효과성 확인 단계의 현재 사이클만 종결할 수 있습니다.');
     }
     const checks = detail.effectivenessChecks.filter(item => item.cycle_id === cycle.id && item.passed);
     const blocked = closeBlockReason(detail, checks);
@@ -1442,16 +1604,16 @@ async function runEffectivenessClose(button) {
         cycleId: cycle.id, id: value('id'), checkId: value('checkId'), actorId: state.actorId,
         reason: value('reason'), at: value('at') };
     if (['id', 'checkId', 'reason', 'at'].some(key => !input[key])) {
-        throw new Error('Choose the passing check and enter a decision ID, reason and time');
+        throw new Error('합격 확인을 선택하고 결정 ID, 이유와 시각을 입력하세요.');
     }
-    assertStableId(input.id, 'Closure decision ID');
+    assertStableId(input.id, '종결 결정 ID');
     const check = checks.find(item => item.id === input.checkId);
-    if (!check) throw new Error('Choose a passing check from the current cycle');
+    if (!check) throw new Error('현재 사이클의 합격 확인을 선택하세요.');
     if (check.evaluated_by === state.actorId) {
-        throw new Error(`${state.actorId} evaluated ${check.id} and cannot also approve closure`);
+        throw new Error('효과성을 평가한 사람은 같은 확인으로 종결할 수 없습니다.');
     }
     await submitEffectivenessAction(button, 'closeIncidentCycle', input, result =>
-        '합격 확인을 근거로 사이클이 종결되었습니다. 이전 확인 기록은 보존됩니다.');
+        '사이클 종결을 기록했습니다. 이전 확인 기록은 그대로 남습니다.');
 }
 
 // A reopen needs the Closed current cycle, a later failed check with recurrence, and linked same-code AOI source.
@@ -1489,16 +1651,16 @@ function renderEffectivenessReopen(detail) {
     const usable = evidence.filter(item => item.inspected_at <= latestWindowEnd);
     const actor = state.bootstrap.actors.find(item => item.id === state.actorId);
     const blockReason = !actor ? '현재 역할을 선택하세요.' :
-        actor.role !== 'Quality Engineer' ? '품질 엔지니어만 종결된 사이클을 재개할 수 있습니다.' :
+        actor.role !== 'Quality Engineer' ? cannotDo(actor, '사이클 재개', '품질 엔지니어') :
             !usable.length ? '불합격 확인 구간 안에 연결된 동일 결함 AOI 재발 근거가 없습니다.' : null;
     const { card, gateState } = renderNextStepCard('reopen', {
         label: '사이클 재개', role: '품질 엔지니어'
     }, blockReason);
-    const checkOptions = checks.map(item => `<option value="${text(item.id)}" data-window-end="${text(item.evaluated_at)}">${text(item.id)} · 재발 ${text(number(item.recurrence_count))}건 · ${dateText(item.evaluated_at)}</option>`).join('');
-    const evidenceOptions = evidence.map(item => `<option value="${text(item.defect_id)}" data-inspected-at="${text(item.inspected_at)}">${text(item.defect_id)} · ${text(item.lot_id)} · ${dateText(item.inspected_at)} · ${text(number(item.defect_count))}건</option>`).join('');
+    const checkOptions = checks.map(item => `<option value="${text(item.id)}" data-window-end="${text(item.evaluated_at)}">불합격 확인 · 재발 ${text(number(item.recurrence_count))}건 · ${dateText(item.evaluated_at)}</option>`).join('');
+    const evidenceOptions = evidence.map(item => `<option value="${text(item.defect_id)}" data-inspected-at="${text(item.inspected_at)}">${text(item.lot_id)} · ${dateText(item.inspected_at)} · ${text(number(item.defect_count))}건 · ${text(item.defect_id)}</option>`).join('');
     return `<div class="effectiveness-action" aria-labelledby="effectiveness-reopen-title"><h4 id="effectiveness-reopen-title">사이클 재개</h4>${card}
         <form id="effectiveness-reopen-form" class="form-grid capa-form" data-effectiveness-form="reopen"><p>종결 후 불합격 확인과 동일 결함의 AOI 재발 근거를 선택하세요. 이전 종결과 확인 기록은 보존됩니다.</p>
-        <label>재개 결정 ID<input name="id" required maxlength="80" pattern="[A-Z](?:[A-Z0-9]|-){2,79}" autocomplete="off" spellcheck="false" class="mono" value="${text(nextReopenDecisionId(detail, cycle))}"></label>
+        <details><summary>기록 ID</summary><label>재개 결정 ID<input name="id" required maxlength="80" pattern="[A-Z](?:[A-Z0-9]|-){2,79}" autocomplete="off" spellcheck="false" class="mono" value="${text(nextReopenDecisionId(detail, cycle))}"></label></details>
         <label>재개 시각 (UTC)<input name="at" required maxlength="24" autocomplete="off" spellcheck="false" class="mono" placeholder="2026-10-06T11:00:00.000Z" value="${text(laterUtc(detail.incident.updated_at))}"></label>
         <label>종결 후 불합격 확인<select name="checkId" required><option value="" selected>선택하세요</option>${checkOptions}</select></label>
         <label>동일 결함 AOI 재발 근거<select name="recurrenceAoiDefectId" required><option value="" selected>선택하세요</option>${evidenceOptions}</select></label>
@@ -1525,8 +1687,8 @@ async function runEffectivenessReopen(button) {
     const detail = state.incidentDetail;
     const form = document.getElementById('effectiveness-reopen-form');
     const context = detail ? reopenContext(detail) : null;
-    if (!form || !context) throw new Error('Reopen needs a Closed cycle with a later failed recurrence check');
-    if (!actorHasRole(['Quality Engineer'])) throw new Error('Select a Quality Engineer to reopen the cycle');
+    if (!form || !context) throw new Error('재개하려면 종결된 사이클과 그 이후의 재발 불합격 확인이 필요합니다.');
+    if (!actorHasRole(['Quality Engineer'])) throw new Error('품질 엔지니어로 전환하세요.');
     const values = new FormData(form);
     const value = name => String(values.get(name) ?? '').trim();
     const input = { incidentId: detail.incident.id, expectedRevisionNo: detail.revisions.at(-1)?.revision_no,
@@ -1534,29 +1696,51 @@ async function runEffectivenessReopen(button) {
         recurrenceAoiDefectId: value('recurrenceAoiDefectId'), actorId: state.actorId,
         reason: value('reason'), at: value('at') };
     if (['id', 'checkId', 'recurrenceAoiDefectId', 'reason', 'at'].some(key => !input[key])) {
-        throw new Error('Choose the failed check and recurrence source, and enter a decision ID, reason and time');
+        throw new Error('불합격 확인과 재발 근거를 선택하고 결정 ID, 이유와 시각을 입력하세요.');
     }
-    assertStableId(input.id, 'Reopen decision ID');
+    assertStableId(input.id, '재개 결정 ID');
     const check = context.checks.find(item => item.id === input.checkId);
     const source = context.evidence.find(item => item.defect_id === input.recurrenceAoiDefectId);
     if (!check || !source || source.inspected_at > check.evaluated_at) {
-        throw new Error('The recurrence source must fall inside the chosen check window');
+        throw new Error('재발 근거는 선택한 확인 구간 안에 있어야 합니다.');
     }
     await submitEffectivenessAction(button, 'reopenIncidentCycle', input, result =>
-        `Cycle ${result.priorCycleId} reopened by ${result.decisionId} from recurrence ${result.recurrenceAoiDefectId}. Earlier closures and checks are unchanged; starting cycle ${result.nextCycleNo} is a separate CAPA decision.`);
+        `사이클 재개를 기록했습니다. 이전 종결과 확인 기록은 그대로 남습니다. ${number(result.nextCycleNo)}회차 CAPA는 별도로 시작합니다.`);
 }
 
 function renderIncidentTable(incidents) {
-    if (!incidents.length) return empty('사건 기록이 없습니다', '결함 신호가 있으면 FabTrace에서 사건을 등록하세요.');
-    return `<div class="table-wrap"><table><thead><tr><th>기록</th><th>사건</th><th>설비 / 모듈</th><th>상태</th><th>발견 시각 (UTC)</th></tr></thead><tbody>${incidents.map(item => `<tr><td><button type="button" class="table-button" data-open-incident="${text(item.id)}">상세 보기</button><details><summary>기록 ID</summary><span class="mono">${text(item.id)}</span></details></td><td>${text(item.title)}<br><span class="muted mono">${text(item.defect_code_id)}</span></td><td class="mono">${text(item.equipment_id)} / ${text(item.module_id)}</td><td>${chip(item.state)}</td><td class="nowrap muted">${dateText(item.detected_at)}</td></tr>`).join('')}</tbody></table></div>`;
+    if (!incidents.length) return empty('사건 기록이 없습니다', '결함 신호가 있으면 영향 추적에서 사건을 등록하세요.');
+    return `<div class="table-wrap"><table><thead><tr><th>사건</th><th>상태</th><th>설비 / 모듈</th><th>발견 시각 (UTC)</th><th><span class="visually-hidden">상세</span></th></tr></thead><tbody>${incidents.map(item => `<tr><td class="strong">${text(item.title)}<br><span class="muted">${text(defectName(item.defect_code_id))}</span></td><td>${chip(item.state)}</td><td><span class="mono nowrap">${text(item.equipment_id)}</span> · <span class="mono nowrap">${text(item.module_id)}</span></td><td class="nowrap muted">${dateText(item.detected_at)}</td><td class="nowrap"><button type="button" class="table-button" data-open-incident="${text(item.id)}">열기</button></td></tr>`).join('')}</tbody></table></div>`;
+}
+
+// Candidate reasons in site terms: the counts behind the classification, not the rule sentence.
+function candidateReason(item) {
+    const parts = [];
+    if (item.classification === 'excluded') {
+        const reasons = String(item.reason ?? '');
+        if (/equipment/i.test(reasons)) parts.push('다른 설비');
+        if (/module/i.test(reasons)) parts.push('다른 모듈');
+        if (/recipe/i.test(reasons)) parts.push('다른 레시피');
+        if (/ended before/i.test(reasons)) parts.push('노출 구간 전 종료');
+        if (/started at or after/i.test(reasons)) parts.push('차단 이후 시작');
+        return parts.length ? parts.join(' · ') : '노출 구간 밖';
+    }
+    parts.push(`대상 결함 ${number(item.targeted_defects)}건`);
+    parts.push(`확정 노출 구간 AOI ${number(item.certain_interval_defects)}건`);
+    const reason = String(item.reason ?? '');
+    if (/unknown/i.test(reason)) parts.push('LKG 시작 불명');
+    else if (/only the uncertain/i.test(reason)) parts.push('LKG 불확실 구간만 겹침');
+    else if (/spans uncertain/i.test(reason)) parts.push('불확실·확정 구간에 걸침');
+    if (/partial/i.test(reason)) parts.push('구간 일부 겹침');
+    return parts.join(' · ');
 }
 
 function renderIncidentGate(next, eligible, detail) {
-    if (!next) return '<div class="hint-box">범위 검토가 기록되었습니다. 이후 CAPA와 효과성 확인을 진행하세요.</div>';
+    if (!next) return '<p class="muted">범위 검토가 끝났습니다. 아래 CAPA 단계로 이어집니다.</p>';
     const review = next.action === 'reviewIncidentScope';
-    const lotChoices = review ? `<div id="incident-lot-decisions" class="form-grid top-gap"><p>각 후보 LOT의 범위와 봉쇄 조치, 이유를 기록하세요. 제외 LOT은 제외 상태로 유지됩니다.</p>${detail.candidates.map(candidate => {
+    const lotChoices = review ? `<div id="incident-lot-decisions" class="form-grid top-gap"><p>후보 LOT마다 범위, 봉쇄 조치와 이유를 기록합니다.</p>${detail.candidates.map(candidate => {
         const excluded = candidate.classification === 'excluded';
-        return `<div class="card form-grid lot-decision" data-lot-id="${text(candidate.lot_id)}"><h4>${text(candidate.lot_id)} · ${text(labelFor(labels.states, candidate.classification) ?? candidate.classification)}</h4><p>${text(candidate.reason)}</p><label>범위 판정<select class="lot-scope-status" required>${excluded ? '<option value="excluded">원천 구간에서 제외</option>' : `<option value="" selected>선택하세요</option><option value="${candidate.classification === 'ambiguous' ? 'ambiguous' : 'included'}">${candidate.classification === 'ambiguous' ? '불확실' : '포함'}</option><option value="${candidate.classification === 'ambiguous' ? 'included' : 'ambiguous'}">${candidate.classification === 'ambiguous' ? '포함' : '불확실'}</option>`}</select></label><label>봉쇄 조치<select class="lot-containment" required>${excluded ? '<option value="No Change">변경 없음</option>' : '<option value="" selected>선택하세요</option><option value="Held">보류</option><option value="Additional Inspection">추가 검사</option>'}</select></label><label>LOT 판정 이유<textarea class="lot-decision-reason" maxlength="500" placeholder="원천 구간과 AOI 근거를 설명하세요"></textarea></label></div>`;
+        return `<div class="card form-grid lot-decision" data-lot-id="${text(candidate.lot_id)}"><h4><span class="nowrap">${text(candidate.lot_id)}</span> · ${text(stateLabel(candidate.classification))}</h4><p>${text(candidateReason(candidate))}</p><label>범위 판정<select class="lot-scope-status" required>${excluded ? '<option value="excluded">원천 구간에서 제외</option>' : `<option value="" selected>선택하세요</option><option value="${candidate.classification === 'ambiguous' ? 'ambiguous' : 'included'}">${candidate.classification === 'ambiguous' ? '불확실' : '포함'}</option><option value="${candidate.classification === 'ambiguous' ? 'included' : 'ambiguous'}">${candidate.classification === 'ambiguous' ? '포함' : '불확실'}</option>`}</select></label><label>봉쇄 조치<select class="lot-containment" required>${excluded ? '<option value="No Change">변경 없음</option>' : '<option value="" selected>선택하세요</option><option value="Held">보류</option><option value="Additional Inspection">추가 검사</option>'}</select></label><label>LOT 판정 이유<textarea class="lot-decision-reason" maxlength="500" placeholder="원천 구간과 AOI 근거를 설명하세요"></textarea></label></div>`;
     }).join('')}</div>` : '';
     const blockReason = eligible ? null : incidentBlockReason(next, detail);
     const { card, gateState } = renderNextStepCard('incident', next, blockReason);
@@ -1570,91 +1754,114 @@ function renderIncidentDetail() {
     const next = incidentGate(detail);
     const eligible = incidentActorEligible(next, detail);
     const window = detail.proposal?.result?.window;
-    return `<div class="page-heading"><div><p class="eyebrow">FabTrace</p><h1>영향 추적 상세</h1><p>결함 신호, 영향 LOT, 봉쇄와 독립 검토 결정을 확인합니다.</p></div><div class="heading-actions"><button type="button" class="button" data-view="fabtrace">← 사건 목록</button></div></div>
-        <div class="record-header"><div><h2>${text(incident.title)}</h2><p>관측 LOT ${text(detail.observedLotId ?? '—')} · 레시피 ${text(detail.recipeRevisionId ?? '—')}</p><details><summary>기술 정보</summary><span class="mono muted">${text(incident.id)} · ${text(incident.defect_code_id)}</span></details></div><div class="record-meta">${chip(incident.state)}<span class="small-chip">${text(incident.equipment_id)}</span><span class="small-chip">${text(incident.module_id)}</span></div></div>
-        <div class="panel-grid top-gap"><div class="stack"><section class="detail-section"><h3>발견·봉쇄·마지막 정상 관측(LKG)</h3><div class="field-grid">${row('발견 시각 (UTC)', dateText(incident.detected_at))}${row('봉쇄 LOT', detail.containment.at(-1)?.heldLotIds?.join(', ') ?? '봉쇄 전')}${row('봉쇄 담당자', detail.containment.at(-1)?.ownerActorId ?? '대기 중')}${row('봉쇄 이유', detail.containment.at(-1)?.reason ?? '대기 중')}${row('가능한 LKG 시작', dateText(detail.lkg?.earliest_possible_at))}${row('가능한 LKG 끝', dateText(detail.lkg?.latest_possible_at))}</div><details><summary>기술 정보</summary>${row('발견 이벤트', detail.detectionEvent?.id ?? '없음')}${row('LKG AOI 관측', detail.lkg?.aoi_inspection_id ?? '없음')}</details>${detail.lkg ? `<div class="warning-box top-gap"><strong>관측 한계:</strong> ${text(detail.lkg.limitation)}</div>` : ''}</section>
-        <section class="detail-section"><h3>노출 구간과 영향 LOT</h3>${window ? `<p class="muted">${dateText(window.startAt)} → ${dateText(window.endAt)} · [시작, 끝) · ${window.unknownStart ? 'LKG 시작 불명' : `${dateText(window.uncertainUntilAt)}까지 불확실`}</p>` : '<p class="muted">LKG를 기록한 뒤 영향 범위를 제안할 수 있습니다.</p>'}
-        ${detail.candidates.length ? `<div class="table-wrap"><table><thead><tr><th>LOT</th><th>출처 분류</th><th>대상 AOI</th><th>확정 구간 AOI</th><th>처분</th><th>출처 이유</th><th>검토 이유</th></tr></thead><tbody>${detail.candidates.map(item => {
+    const containment = detail.containment.at(-1);
+    const recordIds = [incident.id, incident.defect_code_id, detail.detectionEvent?.id, detail.lkg?.aoi_inspection_id,
+        ...detail.traceProposals.map(proposal => `${proposal.incident_revision_id} · ${proposal.id} · ${shortHash(proposal.resultDigest)}`)]
+        .filter(Boolean).map(value => `<span class="mono muted">${text(value)}</span>`).join('');
+    const counts = detail.candidates.reduce((total, item) => ({ ...total, [item.classification]: (total[item.classification] ?? 0) + 1 }), {});
+    const countLine = ['confirmed-affected', 'potentially-exposed', 'ambiguous', 'excluded']
+        .filter(key => counts[key]).map(key => `${stateLabel(key)} ${number(counts[key])}`).join(' · ');
+    return `<div class="page-heading"><div><p class="eyebrow">FabTrace</p><h1>영향 추적 상세</h1></div><div class="heading-actions"><button type="button" class="button" data-view="fabtrace">← 사건 목록</button></div></div>
+        <div class="record-header"><div><h2>${text(incident.title)}</h2><p>${text(defectName(incident.defect_code_id))} · 관측 LOT <span class="nowrap">${text(detail.observedLotId ?? '—')}</span> · 레시피 ${text(detail.recipeRevisionId ?? '—')}</p><details class="record-ids"><summary>기록 ID</summary>${recordIds}</details></div><div class="record-meta">${chip(incident.state)}<span class="small-chip">${text(incident.equipment_id)}</span><span class="small-chip">${text(incident.module_id)}</span></div></div>
+        <div class="panel-grid top-gap"><div class="stack"><section class="detail-section"><h3>노출 구간과 영향 LOT</h3>${window ? `<p class="exposure-window"><strong>${dateText(window.startAt)} → ${dateText(window.endAt)}</strong> UTC · ${window.unknownStart ? 'LKG 시작 불명' : `${dateText(window.uncertainUntilAt)}까지 불확실`}${countLine ? ` · ${text(countLine)}` : ''}</p>` : '<p class="muted">마지막 정상 관측(LKG)을 기록하면 영향 범위를 계산할 수 있습니다.</p>'}
+        ${detail.candidates.length ? `<div class="table-wrap"><table class="lot-table"><thead><tr><th>LOT</th><th>분류</th><th>대상 결함</th><th>확정 구간 AOI</th><th>처분</th><th>분류 근거</th><th>검토 이유</th></tr></thead><tbody>${detail.candidates.map(item => {
             const decision = detail.scopeDecisions.find(entry => entry.lot_id === item.lot_id);
-            return `<tr><td class="mono">${text(item.lot_id)}</td><td>${chip(item.classification)}</td><td>${number(item.targeted_defects)}</td><td>${number(item.certain_interval_defects)}</td><td>${text(decision ? `${decision.scope_status} · ${decision.containment}` : 'Pending independent review')}</td><td>${text(item.reason)}</td><td>${text(decision?.reason ?? 'Pending')}</td></tr>`;
-        }).join('')}</tbody></table></div>` : empty('영향 LOT 없음', '출처 추적 후 제외·불확실·포함 LOT과 이유가 표시됩니다.')}</section></div>
-        <div class="stack"><section class="detail-section"><h3>현재 단계</h3><div class="field-grid">${row('상태', labelFor(labels.states, incident.state) ?? incident.state)}${row('범위 검토', detail.scopeReview?.decision ?? '대기 중')}${row('검토 이유', detail.scopeReview?.reason ?? '대기 중')}</div><details><summary>기술 정보</summary>${row('추적 요청자', detail.proposal?.proposer_actor_id ?? '없음')}${row('범위 검토자', detail.scopeReview?.reviewer_actor_id ?? '없음')}</details><hr class="divider">${renderIncidentGate(next, eligible, detail)}</section>
-        ${detail.traceProposals.length ? `<section class="detail-section"><h3>추적 개정 이력</h3>${detail.traceProposals.map(proposal => `<div class="hint-box top-gap"><p>개정 이유: ${text(detail.revisions.find(item => item.id === proposal.incident_revision_id)?.reason ?? '없음')}</p><p>검토 결과: ${text(proposal.scopeReview?.decision ?? '대기 중')} · 이유: ${text(proposal.scopeReview?.reason ?? '대기 중')}</p><details><summary>기술 정보</summary><span class="mono">${text(proposal.incident_revision_id)} · ${text(proposal.id)} · ${text(proposal.resultDigest)}</span></details></div>`).join('')}</section>` : ''}
-        <section class="detail-section"><h3>감사 이력</h3><p>결정의 역할·시각과 상세 근거를 확인할 수 있습니다.</p>${renderAudit(detail.audit)}</section></div></div>${renderCapaWorkflow(detail)}${renderEffectivenessHistory(detail)}`;
+            return `<tr><td class="mono nowrap">${text(item.lot_id)}</td><td>${chip(item.classification)}</td><td>${number(item.targeted_defects)}건</td><td>${number(item.certain_interval_defects)}건</td><td class="nowrap">${text(decision ? `${stateLabel(decision.scope_status)} · ${stateLabel(decision.containment)}` : '독립 검토 대기')}</td><td>${text(candidateReason(item))}</td><td>${text(decision?.reason ?? '—')}</td></tr>`;
+        }).join('')}</tbody></table></div>` : empty('영향 LOT 없음', '영향 범위를 계산하면 LOT별 분류와 근거가 표시됩니다.')}</section>
+        <section class="detail-section"><h3>발견·봉쇄·마지막 정상 관측(LKG)</h3><div class="field-grid">${row('발견 시각 (UTC)', timeText(incident.detected_at))}${row('봉쇄 LOT', containment?.heldLotIds?.join(', ') ?? '봉쇄 전')}${row('봉쇄 담당', containment?.ownerActorId ? actorLabel(containment.ownerActorId) : '대기 중')}${row('봉쇄 이유', containment?.reason ?? '대기 중')}${row('LKG 가능 구간 (UTC)', detail.lkg ? `${timeText(detail.lkg.earliest_possible_at)} → ${timeText(detail.lkg.latest_possible_at)}` : '대기 중')}</div>${detail.lkg ? `<div class="warning-box top-gap"><strong>관측 한계:</strong> ${text(sampleDisplay(detail.lkg.limitation))}</div>` : ''}</section></div>
+        <div class="stack"><section class="detail-section"><h3>현재 단계</h3><div class="field-grid">${row('상태', stateLabel(incident.state))}${row('범위 검토', detail.scopeReview ? `${stateLabel(detail.scopeReview.decision)} · ${actorLabel(detail.scopeReview.reviewer_actor_id)}` : '대기 중')}${row('검토 이유', detail.scopeReview?.reason ?? '대기 중')}${row('추적 요청자', detail.proposal ? actorLabel(detail.proposal.proposer_actor_id) : '—')}</div><hr class="divider">${renderIncidentGate(next, eligible, detail)}</section>
+        ${detail.traceProposals.length > 1 ? `<section class="detail-section"><h3>추적 개정 이력</h3>${detail.traceProposals.map(proposal => `<div class="hint-box top-gap"><p>개정 이유: ${text(sampleDisplay(detail.revisions.find(item => item.id === proposal.incident_revision_id)?.reason ?? '없음'))}</p><p>검토 결과: ${text(proposal.scopeReview ? stateLabel(proposal.scopeReview.decision) : '대기 중')} · ${text(proposal.scopeReview?.reason ?? '')}</p></div>`).join('')}</section>` : ''}
+        <section class="detail-section"><h3>감사 이력</h3>${renderAudit(detail.audit)}</section></div></div>${renderCapaWorkflow(detail)}${renderEffectivenessHistory(detail)}`;
 }
 
 function renderFabTrace() {
     if (state.incidentId) return renderIncidentDetail();
     const actor = state.bootstrap.actors.find(item => item.id === state.actorId);
     const mayOpen = ['Quality Engineer', 'Production Manager'].includes(actor?.role);
-    return `<div class="page-heading"><div><p class="eyebrow">영향 추적</p><h1>FabTrace</h1><p>결함 신호를 설비·레시피 이력, 영향 LOT과 봉쇄 결정에 연결합니다.</p></div></div>
+    return `<div class="page-heading"><div><p class="eyebrow">FabTrace</p><h1>영향 추적</h1><p>결함 신호에서 노출 구간과 영향 LOT을 계산하고 봉쇄·CAPA 결정으로 연결합니다.</p></div></div>
         <div class="panel-grid"><div class="stack"><div class="section-head no-top-margin"><div><h2>사건 목록</h2><p>${number(state.bootstrap.incidents.length)}건</p></div></div>${renderIncidentTable(state.bootstrap.incidents)}</div>
-        <aside class="card"><div class="card-kicker">새 사건</div><h2>정비 후 이상 등록</h2><p>결함 발견 후 영향을 추적합니다.</p><form id="create-incident-form" class="form-grid"><label>제목<input name="title" required maxlength="120" value="모듈 정비 후 정렬 결함 증가"></label><details><summary>연결된 근거</summary><div class="hint-box">EV-DETECTION · LOT-A-026 · REC-ALIGN-R3 · 2026-08-27 10:00 UTC</div></details>${mayOpen ? '' : '<div class="warning-box">품질 엔지니어 또는 생산 관리자 역할을 선택하세요.</div>'}<button type="submit" class="button primary" ${mayOpen ? '' : 'disabled'}>사건 등록 →</button></form></aside></div>`;
+        <aside class="card"><h2>사건 등록</h2><p>정비 후 결함 증가처럼 영향 범위를 확인해야 하는 신호를 등록합니다.</p><form id="create-incident-form" class="form-grid"><label>제목<input name="title" required maxlength="120" value="모듈 정비 후 정렬 결함 증가"></label><details><summary>연결된 근거</summary><div class="hint-box">EV-DETECTION · LOT-A-026 · REC-ALIGN-R3 · 2026-08-27 10:00 UTC</div></details>${mayOpen ? '' : '<p class="muted">품질 엔지니어 또는 생산 관리자로 전환하세요.</p>'}<button type="submit" class="button primary" ${mayOpen ? '' : 'disabled'}>사건 등록 →</button></form></aside></div>`;
 }
 
 function renderDemoInfo() {
-    return `<div class="page-heading"><div><p class="eyebrow">FabAssure</p><h1>데모 정보</h1><p>이 작업 공간의 데이터와 실행 범위를 확인하세요.</p></div></div>
+    return `<div class="page-heading"><div><p class="eyebrow">FabAssure</p><h1>데모 정보</h1><p>이 작업 공간의 데이터와 실행 범위입니다.</p></div></div>
         <div class="card"><div class="field-grid">
-            ${row('데이터', '모든 회사·설비·LOT·측정값은 샘플 데이터입니다.')}
+            ${row('데이터', '회사·설비·LOT·측정값은 모두 샘플 데이터입니다. 합성 정렬·AOI 공정을 사용합니다.')}
             ${row('연동', '실제 MES 또는 설비와 연결되지 않습니다.')}
             ${row('실행', '이 PC의 로컬 주소에서만 실행됩니다.')}
-            ${row('역할', '역할 전환은 모의 사용자를 이용하며 실제 신원 인증이 아닙니다.')}
+            ${row('역할', '역할 전환은 모의 사용자이며 실제 신원 인증이 아닙니다.')}
         </div></div>`;
+}
+
+const kindNames = Object.freeze({ 'aoi-defect-signal': 'AOI 결함 신호', 'equipment-event': '설비 이벤트',
+    'maintenance-action': '정비 조치' });
+const eventTypeNames = Object.freeze({ 'recipe-change': '레시피 변경', failure: '고장', 'module-change': '모듈 교체',
+    'defect-detected': '결함 발견', 'lkg-earliest-bound': 'LKG 가능 구간 시작', 'lkg-latest-bound': 'LKG 가능 구간 끝',
+    REPAIR: '수리' });
+function timelineSummary(item) {
+    if (item.kind === 'aoi-defect-signal') {
+        const match = String(item.summary ?? '').match(/^(\d+)\/(\d+) rejected; (.*)$/);
+        if (!match) return sampleDisplay(item.summary ?? '—');
+        const defects = match[3].split(',').map(part => part.trim().split(':')[0]).filter(code => code.startsWith('DEF-'));
+        return `불량 ${match[1]}/${match[2]}${defects.length ? ` · ${defects.map(defectName).join(', ')}` : ''}`;
+    }
+    if (item.kind === 'maintenance-action') return `${eventTypeNames[item.code] ?? item.code} · ${sampleDisplay(item.summary ?? '')}`;
+    return eventTypeNames[item.eventType] ?? item.eventType ?? '—';
 }
 
 function renderEquipment() {
     const detail = state.equipmentDetail;
     if (!detail) return empty('설비를 선택하세요', '설비를 선택하면 이력과 검사 결과를 볼 수 있습니다.');
     const { equipment, observationWindow, reliability, timeline, recentRuns, aoi,
-        aoiInspections, aoiCohort } = detail;
+        aoiInspections } = detail;
     const choices = state.equipmentList.equipment.map(item => `<button type="button"
         class="button ${item.id === equipment.id ? 'dark' : ''}"
         data-open-equipment="${text(item.id)}">${text(item.code)} · ${text(item.lineId)}</button>`).join('');
-    const eventRows = timeline.map(item => `<tr><td class="nowrap">${dateText(item.at)}</td>
-        <td><span class="mono">${text(item.id)}</span><br><span class="muted">${text(item.kind)}</span></td>
-        <td>${text(item.kind === 'maintenance-action' ? item.code : item.eventType)}</td>
-        <td class="mono">${text(item.moduleId)}</td>
-        <td>${item.kind === 'maintenance-action' ? `${dateText(item.startAt)} → ${dateText(item.endAt)}` :
-            item.durationSeconds == null ? '—' : `${number(item.durationSeconds / 3600)} h`}</td>
-        <td>${text(sampleDisplay(item.summary ?? '—'))}</td></tr>`).join('');
-    const runRows = recentRuns.map(item => `<tr><td class="mono">${text(item.id)}</td>
-        <td class="mono">${text(item.lotId)}</td><td class="mono">${text(item.moduleId)}</td>
-        <td class="mono">${text(item.recipeRevisionId)}</td><td>${dateText(item.startAt)}</td>
-        <td>${number(item.processedUnits)}</td></tr>`).join('');
-    const aoiRows = aoiInspections.map(item => `<tr><td class="mono">${text(item.id)}</td>
-        <td class="mono">${text(item.lotId)}</td><td class="mono">${text(item.processRunId)}</td>
-        <td>${dateText(item.inspectedAt)}</td><td>${number(item.inspectedUnits)}</td>
+    const eventRows = timeline.map(item => {
+        const key = item.kind === 'maintenance-action' || item.eventType === 'failure';
+        return `<tr class="${key ? 'timeline-key' : ''}"><td class="nowrap">${dateText(item.at)}</td>
+        <td class="nowrap">${text(kindNames[item.kind] ?? item.kind)}</td>
+        <td>${text(timelineSummary(item))}</td>
+        <td class="nowrap">${item.kind === 'maintenance-action' ? `${dateText(item.startAt)} → ${dateText(item.endAt).slice(11)}` :
+            item.durationSeconds ? `${number(item.durationSeconds / 3600)} h` : '—'}</td>
+        <td class="mono muted nowrap">${text(item.id)}</td></tr>`;
+    }).join('');
+    const runRows = recentRuns.map(item => `<tr><td class="mono">${text(item.lotId)}</td>
+        <td class="mono">${text(item.recipeRevisionId)}</td><td class="nowrap">${dateText(item.startAt)}</td>
+        <td>${number(item.processedUnits)}</td><td class="mono muted">${text(item.id)} · ${text(item.moduleId)}</td></tr>`).join('');
+    const aoiRow = item => `<tr${item.rejectedUnits ? ' class="has-defect"' : ''}><td class="mono nowrap">${text(item.lotId)}</td>
+        <td class="nowrap">${dateText(item.inspectedAt)}</td><td>${number(item.inspectedUnits)}</td>
         <td>${number(item.rejectedUnits)}</td><td>${item.defects.map(defect =>
-            `${text(defect.id)} · ${text(defect.defectCodeId)}: ${number(defect.defectCount)}`).join(', ') || '—'}</td></tr>`).join('');
+            `${text(defectName(defect.defectCodeId))} ${number(defect.defectCount)}건`).join(', ') || '—'}</td><td class="mono muted">${text(item.id)}${item.defects.map(defect => `<br>${text(defect.id)} · ${text(defect.defectCodeId)}`).join('')}</td></tr>`;
+    const defective = aoiInspections.filter(item => item.rejectedUnits > 0);
+    const aoiHead = '<thead><tr><th>LOT</th><th>검사 시각 (UTC)</th><th>검사 수량</th><th>불량 수량</th><th>결함</th><th>원천 기록</th></tr></thead>';
     const rate = aoi.inspectedUnits ? aoi.rejectedUnits / aoi.inspectedUnits : null;
     return `<div class="page-heading"><div><p class="eyebrow">설비 신뢰성</p>
-        <h1>설비 이력</h1><p>설비 이벤트, 수리, 레시피와 공정 기록을 같은 관측 구간에서 확인합니다.</p></div></div>
+        <h1>설비 이력</h1><p>고장·정비, 레시피 변경과 AOI 결함을 같은 시간축에서 봅니다.</p></div></div>
         <div class="heading-actions">${choices}</div>
-        <div class="record-header top-gap"><div><h2>${text(sampleDisplay(equipment.name))}</h2><p>모듈 ${equipment.modules.map(item => text(item.id)).join(', ')}</p><details><summary>기술 정보</summary><span class="mono muted">${text(equipment.id)} · ${text(equipment.lineId)}</span></details></div>
+        <div class="record-header top-gap"><div><h2>${text(sampleDisplay(equipment.name))}</h2><p>모듈 ${equipment.modules.map(item => text(item.id)).join(', ')} · 관측 ${dateText(observationWindow.startAt)} → ${dateText(observationWindow.endExclusiveAt)} UTC</p></div>
         <div class="record-meta"><span class="small-chip">조회 전용</span></div></div>
-        <div class="stat-grid"><div class="stat-card teal"><span class="label">관측 구간</span>
+        <div class="stat-grid"><div class="stat-card muted"><span class="label">관측 구간</span>
         <strong class="value">${number(observationWindow.hours)} <small>h</small></strong>
-        <span class="foot">${dateText(observationWindow.startAt)} → ${dateText(observationWindow.endExclusiveAt)} (끝 제외)</span></div>
+        <span class="foot">공정 실행 ${number(detail.processRunCount)}건</span></div>
         <div class="stat-card emphasis"><span class="label">고장 / 수리 시간</span>
         <strong class="value">${number(reliability.failureCount)} / ${number(reliability.downtimeHours)} <small>h</small></strong>
         <span class="foot">연결된 고장·수리 기록</span></div>
         <div class="stat-card muted"><span class="label">MTBF</span><strong class="value">${number(reliability.mtbfHours)} <small>h</small></strong>
         <span class="foot">(관측 시간 − 수리 시간) / 고장 건수</span></div>
-        <div class="stat-card muted"><span class="label">MTTR</span><strong class="value">${number(reliability.mttrHours)} <small>h</small></strong>
-        <span class="foot">수리 시간 / 고장 건수</span></div></div>
-        ${reliability.notCalculatedReason ? `<div class="warning-box top-gap">${text(reliability.notCalculatedReason)}.
+        <div class="stat-card muted"><span class="label">AOI 불량률</span><strong class="value">${percent(rate)}</strong>
+        <span class="foot">검사 ${number(aoi.inspectedUnits)} · 불량 ${number(aoi.rejectedUnits)} · MTTR ${number(reliability.mttrHours)} h</span></div></div>
+        ${reliability.notCalculatedReason ? `<div class="warning-box top-gap">${text(sampleDisplay(reliability.notCalculatedReason))}.
         <details><summary>경계 수리 기록</summary>${reliability.boundaryRepairActionIds.map(text).join(', ')}</details></div>` :
-            reliability.failureCount ? '' : '<div class="hint-box top-gap">이 구간에 고장 기록이 없어 MTBF와 MTTR을 계산하지 않습니다.</div>'}
-        <div class="card top-gap"><h2>설비·정비·AOI 이력</h2>
-        <p>레시피 변경과 고장·수리 기록, AOI 결함 발생 시각을 함께 확인합니다.</p>
-        <div class="table-wrap"><table><thead><tr><th>시각 (UTC)</th><th>원천</th><th>유형 / 코드</th><th>모듈</th><th>지속 시간 / 구간</th><th>기록 요약</th></tr></thead>
-        <tbody>${eventRows || '<tr><td colspan="6">해당 구간에 이벤트가 없습니다.</td></tr>'}</tbody></table></div></div>
-        <div class="card top-gap"><h2>공정·AOI 결과</h2><p>공정 실행 ${number(detail.processRunCount)}건 · AOI 검사 ${number(aoi.inspectionCount)}건 · 검사 ${number(aoi.inspectedUnits)}개 · 불량 ${number(aoi.rejectedUnits)}개 (${percent(rate)}). ${text(aoiCohort)}.</p>
-        <div class="table-wrap"><table><thead><tr><th>실행</th><th>LOT</th><th>모듈</th><th>레시피</th><th>시작 (UTC)</th><th>처리 수량</th></tr></thead>
-        <tbody>${runRows || '<tr><td colspan="6">해당 구간에 공정 실행이 없습니다.</td></tr>'}</tbody></table></div>
-        <h3 class="top-gap">AOI 검사 기록</h3><div class="table-wrap"><table><thead><tr>
-        <th>검사</th><th>LOT</th><th>실행</th><th>시각 (UTC)</th><th>검사 수량</th><th>불량 수량</th><th>결함 코드: 건수</th></tr></thead>
-        <tbody>${aoiRows || '<tr><td colspan="7">해당 구간에 AOI 검사가 없습니다.</td></tr>'}</tbody></table></div></div>`;
+            reliability.failureCount ? '' : '<p class="muted top-gap">이 구간에는 고장 기록이 없어 MTBF와 MTTR을 계산하지 않습니다.</p>'}
+        <div class="card top-gap"><h2>설비·정비·AOI 시간축</h2>
+        <div class="table-wrap"><table class="timeline-table"><thead><tr><th>시각 (UTC)</th><th>구분</th><th>내용</th><th>지속 / 구간</th><th>원천</th></tr></thead>
+        <tbody>${eventRows || '<tr><td colspan="5">해당 구간에 이벤트가 없습니다.</td></tr>'}</tbody></table></div></div>
+        <div class="card top-gap"><h2>AOI 검사</h2><p class="muted">검사 ${number(aoi.inspectionCount)}건 중 불량이 있는 ${number(defective.length)}건</p>
+        <div class="table-wrap"><table>${aoiHead}<tbody>${defective.map(aoiRow).join('') || '<tr><td colspan="6">불량이 있는 검사가 없습니다.</td></tr>'}</tbody></table></div>
+        <details class="top-gap"><summary class="button subtle">전체 AOI 검사 ${number(aoiInspections.length)}건 보기</summary><div class="table-wrap"><table>${aoiHead}<tbody>${aoiInspections.map(aoiRow).join('') || '<tr><td colspan="6">해당 구간에 AOI 검사가 없습니다.</td></tr>'}</tbody></table></div></details>
+        <details class="top-gap"><summary class="button subtle">최근 공정 실행 ${number(recentRuns.length)}건 보기</summary><div class="table-wrap"><table><thead><tr><th>LOT</th><th>레시피</th><th>시작 (UTC)</th><th>처리 수량</th><th>실행 · 모듈</th></tr></thead>
+        <tbody>${runRows || '<tr><td colspan="5">해당 구간에 공정 실행이 없습니다.</td></tr>'}</tbody></table></div></details></div>`;
 }
 
 function render() {
@@ -1672,12 +1879,12 @@ function render() {
     else if (state.view === 'changes') view.innerHTML = state.changeId ? renderChangeDetail() : renderChanges();
     else if (state.view === 'review') {
         const pending = state.bootstrap.changes.filter(change => ['Evidence Ready', 'Independent Review'].includes(change.state));
-        view.innerHTML = `<div class="page-heading"><div><p class="eyebrow">독립 결정</p><h1>검토 대기열</h1><p>증거가 준비된 변경을 확인하고 독립 검토와 수락을 기록합니다.</p></div></div>${renderChangeTable(pending)}`;
-    } else if (state.view === 'audit') view.innerHTML = `<div class="page-heading"><div><p class="eyebrow">결정 이력</p><h1>감사 기록</h1><p>변경 상세에서 결정 순서와 역할·시각을 확인할 수 있습니다.</p></div></div>${state.detail ? `<div class="card">${renderAudit(state.detail.audit)}</div>` : empty('선택한 변경이 없습니다', '변경 목록에서 기록을 연 뒤 감사 이력을 확인하세요.')}`;
+        view.innerHTML = `<div class="page-heading"><div><p class="eyebrow">독립 결정</p><h1>검토 대기열</h1><p>근거가 확정된 변경의 독립 검토와 수락을 기록합니다.</p></div></div>${renderChangeTable(pending)}`;
+    } else if (state.view === 'audit') view.innerHTML = `<div class="page-heading"><div><p class="eyebrow">결정 이력</p><h1>감사 기록</h1><p>마지막으로 연 변경의 결정 순서입니다.</p></div></div>${state.detail ? `<div class="card">${renderAudit(state.detail.audit)}</div>` : empty('선택한 변경이 없습니다', '변경 목록에서 기록을 연 뒤 감사 이력을 확인하세요.')}`;
     else if (state.view === 'evidence') view.innerHTML = `<div class="page-heading"><div><p class="eyebrow">원천에서 결정까지</p><h1>연결된 근거</h1><p>근거는 원천 기록, 검증 기준과 개정에 연결됩니다.</p></div></div>${state.detail ? `<div class="card"><h2>${text(state.detail.change.title)}</h2>${state.detail.revisions.map(item => `<h3>개정 R${number(item.revision.revision_no)}</h3>${renderEvidence(item)}`).join('')}</div>` : empty('선택한 변경이 없습니다', '변경 목록에서 기록을 열어 연결된 근거를 확인하세요.')}`;
     else if (state.view === 'equipment') view.innerHTML = renderEquipment();
     else if (state.view === 'fabtrace') view.innerHTML = renderFabTrace();
-    else if (state.view === 'documents') view.innerHTML = renderModule('관리 문서', '검토된 CAPA 조치는 문서 피드백과 개정에 연결됩니다.', 'FabTrace의 CAPA 이력에서 PFMEA 등 관리 문서의 검토·승인 기록을 확인할 수 있습니다.');
+    else if (state.view === 'documents') view.innerHTML = renderModule('관리 문서', '검토된 CAPA 조치는 문서 피드백과 개정에 연결됩니다.', '관리 계획·PFMEA·작업 지침의 검토·승인 기록은 영향 추적의 CAPA 단계에 있습니다.');
     else if (state.view === 'demoInfo') view.innerHTML = renderDemoInfo();
     if (state.announcedView !== viewName) {
         state.announcedView = viewName;
@@ -1789,7 +1996,7 @@ async function linkPassingSourceSet(next, originNo) {
                     at: `2026-08-${String(day).padStart(2, '0')}T10:01:00.000Z` });
                 added++;
                 if (originNo !== state.navigationRequestNo) return { added, refreshed: false };
-                if (added % 20 === 0) showToast(`${added} source records linked in this run…`);
+                if (added % 20 === 0) showToast(`원천 근거 ${added}건 연결 중…`);
             }
             const evidenceId = `${prefix}-AOI-${daySuffix}`;
             if (!recorded.has(evidenceId)) {
@@ -1835,21 +2042,21 @@ async function runNextGate() {
     const next = actionFor(state.detail);
     if (!next) return;
     if (next.blocked) throw new Error(next.blocked);
-    if (!actorEligible(next, state.detail)) throw new Error('이 작업을 수행할 수 있는 역할을 선택하세요.');
+    if (!actorEligible(next, state.detail)) throw new Error(changeBlockReason(next, state.detail) ?? '이 작업을 할 수 있는 역할로 전환하세요.');
     const reason = next.needsReason ? document.getElementById('gate-reason')?.value.trim() : null;
-    if (next.needsReason && !reason) throw new Error('Enter a decision rationale before proceeding');
+    if (next.needsReason && !reason) throw new Error('판단 이유를 입력하세요.');
     const originNo = state.navigationRequestNo;
     state.busy = true;
     actorSelect.disabled = true;
     try {
         if (next.action === 'linkPassingSourceSet') {
             const result = await linkPassingSourceSet(next, originNo);
-            if (result.refreshed) showToast(`${result.added} source observations linked. Review the evidence before evaluating criteria.`);
+            if (result.refreshed) showToast(`원천 근거 ${result.added}건을 연결했습니다.`);
             return;
         }
         if (next.action === 'linkSourceSet') {
             const result = await linkSourceSet(next, originNo);
-            if (result.refreshed) showToast(`${result.added} source records linked. Review the evidence before evaluating criteria.`);
+            if (result.refreshed) showToast(`원천 근거 ${result.added}건을 연결했습니다.`);
             return;
         }
         const terms = ['acceptChange', 'classifyLegacyAcceptance'].includes(next.action) ? (() => {
@@ -1865,25 +2072,27 @@ async function runNextGate() {
         })() : {};
         const outcome = await commitAndRefresh(sendAction(next.action,
             { ...next.input, ...(next.needsReason ? { reason } : {}), ...terms }), originNo);
-        if (outcome.refreshed) showToast(`${next.label} recorded: ${outcome.body.result.state ?? 'decision saved'}`);
+        if (outcome.refreshed) showToast(recordedToast(actionLabel(next), outcome.body.result.state));
     } finally {
         state.busy = false;
         actorSelect.disabled = false;
     }
 }
 
+const recordedToast = (task, stored) => `${withObject(String(task).replace(/ 기록$/, ''))} 기록했습니다${stored ? ` · ${stateLabel(stored)}` : ''}`;
+
 async function runIncidentGate() {
     if (state.busy) return;
     const next = incidentGate(state.incidentDetail);
     if (!next || !incidentActorEligible(next, state.incidentDetail)) {
-        throw new Error('이 작업을 수행할 수 있는 역할을 선택하세요.');
+        throw new Error((next && incidentBlockReason(next, state.incidentDetail)) ?? '이 작업을 할 수 있는 역할로 전환하세요.');
     }
     const reason = next.needsReason ? document.getElementById('incident-gate-reason')?.value.trim() : null;
-    if (next.needsReason && !reason) throw new Error('Enter a decision rationale before proceeding');
+    if (next.needsReason && !reason) throw new Error('판단 이유를 입력하세요.');
     let input = next.needsReason ? { ...next.input, reason } : next.input;
     if (next.action === 'reviewIncidentScope') {
         const decision = document.getElementById('incident-review-decision')?.value;
-        if (!['Pass', 'Needs Rework'].includes(decision)) throw new Error('Select a scope review decision');
+        if (!['Pass', 'Needs Rework'].includes(decision)) throw new Error('범위 검토 결정을 선택하세요.');
         const lotDecisions = decision === 'Pass' ? [...document.querySelectorAll('.lot-decision')]
             .map(item => ({ lotId: item.dataset.lotId,
                 scopeStatus: item.querySelector('.lot-scope-status')?.value,
@@ -1891,10 +2100,10 @@ async function runIncidentGate() {
                 reason: item.querySelector('.lot-decision-reason')?.value.trim() })) : [];
         if (decision === 'Pass' && (lotDecisions.length !== state.incidentDetail.candidates.length ||
             lotDecisions.some(item => !item.reason))) {
-            throw new Error('Record a reason for every candidate lot before passing scope review');
+            throw new Error('합격 전에 모든 후보 LOT의 판정 이유를 입력하세요.');
         }
         if (lotDecisions.some(item => !item.scopeStatus || !item.containment)) {
-            throw new Error('Choose scope status and containment for every candidate lot');
+            throw new Error('모든 후보 LOT의 범위 판정과 봉쇄 조치를 선택하세요.');
         }
         input = { ...input, decision, lotDecisions };
     }
@@ -1903,7 +2112,7 @@ async function runIncidentGate() {
     actorSelect.disabled = true;
     try {
         const outcome = await commitAndRefresh(sendAction(next.action, input), originNo);
-        if (outcome.refreshed) showToast(`${next.label} recorded: ${outcome.body.result.state ?? 'decision saved'}`);
+        if (outcome.refreshed) showToast(recordedToast(actionLabel(next), outcome.body.result.state));
     } finally {
         state.busy = false;
         actorSelect.disabled = false;
@@ -1914,7 +2123,7 @@ async function runCapaDecision(kind) {
     if (state.busy) return;
     const detail = state.incidentDetail;
     const form = document.getElementById(`capa-${kind}-form`);
-    if (!detail || !form) throw new Error('CAPA decision form is no longer available');
+    if (!detail || !form) throw new Error('CAPA 입력 양식을 찾을 수 없습니다. 화면을 다시 여세요.');
     const values = new FormData(form);
     const actor = state.bootstrap.actors.find(item => item.id === state.actorId);
     const cycleId = openCapaCycle(detail)?.id ?? null;
@@ -1971,16 +2180,16 @@ async function runCapaDecision(kind) {
             throw new Error('별도 문서 승인자를 선택하세요.');
         }
         action = 'approveDocumentRevision'; input = { ...common, feedbackId: selected.id, reason: value('reason') };
-    } else throw new Error('Unknown CAPA decision form');
+    } else throw new Error('알 수 없는 CAPA 양식입니다.');
     if (Object.entries(input).some(([key, item]) => key !== 'cycleId' && key !== 'expectedRevisionNo' && key !== 'actorId' && key !== 'incidentId' && key !== 'at' && (item == null || item === ''))) {
-        throw new Error('Complete every required CAPA decision field');
+        throw new Error('CAPA 결정의 필수 항목을 모두 입력하세요.');
     }
     const originNo = state.navigationRequestNo;
     state.busy = true;
     actorSelect.disabled = true;
     try {
         const outcome = await commitAndRefresh(sendAction(action, input), originNo);
-        if (outcome.refreshed) showToast(`${action} recorded for ${detail.incident.id}`);
+        if (outcome.refreshed) showToast(recordedToast(capaActionLabels[action] ?? 'CAPA 결정', null));
     } finally {
         state.busy = false;
         actorSelect.disabled = false;

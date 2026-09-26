@@ -85,7 +85,7 @@ export async function startAppliance({ root = defaultRoot, port = 4310 } = {}) {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
     startAppliance().then(local => {
-        process.stdout.write(`FabAssure synthetic offline demo: ${local.url}\n`);
+        process.stdout.write(`FabAssure 실행 중: ${local.url}\n`);
         const stop = () => { local.close().catch(error => {
             process.stderr.write(`${error.message}\n`);
             process.exitCode = 1;

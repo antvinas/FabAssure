@@ -15,3 +15,16 @@ test('product shell presents one sample-data cue and a dedicated demo-informatio
     assert.doesNotMatch(html, /REVIEW_PENDING|Claude|Codex|Sol|Luna|SHA-256/);
     assert.doesNotMatch(app, /REVIEW_PENDING/);
 });
+
+test('product copy uses one six-step flow and Korean operator messages', () => {
+    const steps = ['변경', '검증', '근거', '검토', '수락', '효과성'];
+    const chain = app.slice(app.indexOf('const decisionChain'), app.indexOf('function chainStepIndex'));
+    assert.deepEqual([...chain.matchAll(/ko: '([^']+)'/g)].map(match => match[1]), steps);
+    assert.match(app, /변경 → 검증 → 근거 → 검토 → 수락 → 효과성/);
+    assert.doesNotMatch(app, /recorded: \$\{|source records linked|CHANGE · EVIDENCE · DECISION/);
+    assert.doesNotMatch(app, /cannot (evaluate|close|reopen) Change/);
+    assert.doesNotMatch(html, /127\.0\.0\.1|엔지니어링 결정과 그 증거|app-footer/);
+    assert.match(html, />영향 추적</);
+    assert.match(html, />설비 이력</);
+    assert.doesNotMatch(app, /'카메라 /);
+});

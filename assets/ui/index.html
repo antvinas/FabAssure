@@ -19,8 +19,8 @@
             <nav class="primary-nav" aria-label="모듈">
                 <button type="button" data-view="overview" class="nav-link active"><span class="nav-glyph" aria-hidden="true">◫</span>개요</button>
                 <button type="button" data-view="changes" class="nav-link"><span class="nav-glyph" aria-hidden="true">◇</span>변경 관리</button>
-                <button type="button" data-view="fabtrace" class="nav-link"><span class="nav-glyph" aria-hidden="true">⌁</span>FabTrace</button>
-                <button type="button" data-view="equipment" class="nav-link"><span class="nav-glyph" aria-hidden="true">▣</span>설비</button>
+                <button type="button" data-view="fabtrace" class="nav-link"><span class="nav-glyph" aria-hidden="true">⌁</span>영향 추적</button>
+                <button type="button" data-view="equipment" class="nav-link"><span class="nav-glyph" aria-hidden="true">▣</span>설비 이력</button>
                 <button type="button" data-view="evidence" class="nav-link"><span class="nav-glyph" aria-hidden="true">▤</span>증거</button>
                 <button type="button" data-view="documents" class="nav-link"><span class="nav-glyph" aria-hidden="true">▧</span>관리 문서</button>
                 <button type="button" data-view="review" class="nav-link"><span class="nav-glyph" aria-hidden="true">◎</span>검토 대기열</button>
@@ -35,19 +35,18 @@
         </aside>
         <div class="content-shell">
             <header class="topbar">
-                <div class="topbar-title"><span class="topbar-eyebrow">FabAssure / <span id="crumb">개요</span></span><span class="topbar-subtitle">엔지니어링 결정과 그 증거</span></div>
+                <div class="topbar-title"><span class="topbar-eyebrow">FabAssure / <span id="crumb">개요</span></span></div>
                 <div class="topbar-tools">
-                    <span class="offline-pill"><span aria-hidden="true"></span>오프라인 · 127.0.0.1</span>
+                    <span class="offline-pill"><span aria-hidden="true"></span>오프라인</span>
                     <div class="actor-control">
                         <label class="actor-label" for="actor-select">현재 역할</label>
                         <select id="actor-select" aria-describedby="actor-identity"></select>
-                        <p class="actor-identity" id="actor-identity"><span class="actor-name" data-actor-name>—</span><span class="role-chip" data-actor-role>—</span></p>
+                        <p class="actor-identity visually-hidden" id="actor-identity"><span class="actor-name" data-actor-name>—</span><span class="role-chip" data-actor-role>—</span></p>
                     </div>
                 </div>
             </header>
             <main id="view" tabindex="-1" lang="ko"><div class="loading-state">기록을 불러오는 중…</div></main>
             <div id="live-region" class="visually-hidden" role="status" aria-live="polite"></div>
-            <footer class="app-footer"><span>FabAssure · 제조 변경 품질 관리</span><span>로컬 작업 공간</span></footer>
         </div>
     </div>
     <div id="toast" class="toast" role="status" hidden><span id="toast-message"></span><button type="button" id="toast-close" class="toast-close" hidden>닫기</button></div>

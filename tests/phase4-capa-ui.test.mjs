@@ -190,7 +190,7 @@ test('FabTrace UI renders persisted CAPA and controlled-document feedback lineag
         assert.match(view.innerHTML, /DOC-CAM-PFMEA-R2/);
         assert.match(view.innerHTML, /원천 사건/);
         assert.match(view.innerHTML, /INC-CAPA-UI-CYC-1/);
-        assert.equal(context.document.getElementById('crumb').textContent, 'FabTrace');
+        assert.equal(context.document.getElementById('crumb').textContent, '영향 추적');
     }));
 
 test('CAPA and document decisions can be completed through the local UI and persist after refresh', () =>
